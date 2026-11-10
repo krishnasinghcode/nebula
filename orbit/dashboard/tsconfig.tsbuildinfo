@@ -1,1 +1,0 @@
-{"root":["./src/app.tsx","./src/app.test.tsx","./src/main.tsx","./src/api/client.ts","./src/api/schema.d.ts","./src/components/createwizard.tsx","./src/components/instancedetail.tsx","./src/components/instancetable.tsx","./src/components/keyspanel.tsx","./src/components/statebadge.tsx","./src/hooks/usepoll.ts","./src/test/setup.ts"],"version":"5.9.3"}
