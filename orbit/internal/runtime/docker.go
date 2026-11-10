@@ -50,8 +50,8 @@ func (d *DockerAdapter) Ping(ctx context.Context) error {
 // key injection), revisit in Phase 8 hardening backlog.
 func hardening() *container.HostConfig {
 	return &container.HostConfig{
-		CapDrop: []string{"ALL"},
-		CapAdd:  []string{"CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID", "SYS_CHROOT"},
+		CapDrop:       []string{"ALL"},
+		CapAdd:        []string{"CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID", "SYS_CHROOT"},
 		SecurityOpt:   []string{"no-new-privileges"},
 		RestartPolicy: container.RestartPolicy{Name: "no"}, // Orbit's reconciler owns restarts
 		// seccomp: Docker's default profile applies unless overridden;
