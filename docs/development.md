@@ -59,6 +59,20 @@ go test ./... -tags=runtime   # real-Docker suite (Phase 1+) — requires Docker
 - Bug fixes must include regression tests.
 - Runtime-tagged tests require a running Docker Engine.
 
+## Dashboard (Phase 9)
+
+A web UI lives in `orbit/dashboard/` (React + TypeScript + Vite + Tailwind). The API client is generated from `orbit/api/openapi.yaml` (`npm run generate:api`).
+
+```sh
+orbit serve                 # terminal 1 — control plane on 127.0.0.1:7420
+cd orbit/dashboard
+npm install
+npm run generate:api
+npm run dev                 # terminal 2 — UI on http://127.0.0.1:5173
+```
+
+Paste the API token (`~/.orbit/token`) when prompted by the UI. Tests: `npm test` (components), `npx playwright test` (smoke; needs a running `orbit serve` and `ORBIT_TOKEN`).
+
 ## Development Conventions
 
 - Follow the working rules in [`AGENTS.md`](../AGENTS.md) — especially the documentation update matrix and testing requirements.

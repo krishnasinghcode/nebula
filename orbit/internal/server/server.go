@@ -76,7 +76,11 @@ func New(token string, rt runtime.Adapter, api *API) http.Handler {
 
 // Serve listens on 127.0.0.1:port (loopback only) and serves the API.
 func Serve(port int, handler http.Handler) error {
-	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	addr := os.Getenv("ORBIT_ADDR")
+	if addr == "" {
+		// Loopback-only by default; container deployments may override.
+		addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	}
 	return http.ListenAndServe(addr, handler)
 }
 

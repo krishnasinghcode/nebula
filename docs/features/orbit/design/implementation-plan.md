@@ -236,16 +236,16 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 
 **Goal:** cloud-like management dashboard. **Prerequisite: Phase 2 API frozen** (OpenAPI contract stable); CLI remains the primary interface. Stack: React + TypeScript + Vite + Tailwind CSS + shadcn/ui, TypeScript client generated from `orbit/api/openapi.yaml`.
 
-- [ ] 9.1 Scaffold `orbit/dashboard/` (Vite + TS + Tailwind + shadcn/ui); generate API client from the OpenAPI spec.
-- [ ] 9.2 Instance list + detail views (state, type, addresses, ports, events) with SSE-driven live status.
-- [ ] 9.3 Create-instance wizard: image, type, key, user-data, ports — with capacity feedback from `GET /capacity`.
-- [ ] 9.4 Lifecycle actions (start/stop/reboot/terminate with confirm), key management, port publishing UI.
-- [ ] 9.5 Trust-model acknowledgement shown on first instance creation ([security.md §1], NFR-4).
-- [ ] 9.6 Frontend tests: Vitest unit tests for components with API mocking; Playwright smoke flows (create → connect info → terminate).
+- [x] 9.1 Scaffold `orbit/dashboard/` (Vite + TS + Tailwind); API client generated from `orbit/api/openapi.yaml`. *(shadcn/ui skipped — plain Tailwind components; deviation 2026-11-10. Spec extended to cover keys/images/types/capacity before generation.)*
+- [x] 9.2 Instance list + detail views (state, type, addresses, ports, events) with live status. *(2s polling; SSE endpoint doesn't exist yet — deviation 2026-11-10.)*
+- [x] 9.3 Create-instance wizard: image, type, key, user-data, ports — with capacity feedback from `GET /capacity`. *(User-data entered as script text, base64-encoded client-side.)*
+- [x] 9.4 Lifecycle actions (start/stop/reboot/terminate with confirm), key management, port publishing UI. *(Port editing while stopped per 5.2; terminate has a confirm dialog.)*
+- [x] 9.5 Trust-model acknowledgement shown on first instance creation ([security.md §1], NFR-4). *(Checkbox required per create in the wizard.)*
+- [x] 9.6 Frontend tests: Vitest unit tests for components with API mocking; Playwright smoke flows (create → connect info → terminate). *(Playwright smoke green against a live `orbit serve`; 5 Vitest component tests green.)*
 
 **Tests:** component unit tests; Playwright smoke suite against a dev backend using the FakeAdapter; API contract drift check (generated client builds against the frozen spec).
 
-**Checkpoint:** *Flows covered: ___. Builds on: (OS/browser).*
+**Checkpoint:** *Flows covered: create (with trust ack + capacity feedback) → detail/SSH info → terminate; port editing (stopped only); key add/delete. Builds on: Windows 11 (Chrome via Playwright) against orbit serve in a Linux container.*
 
 ---
 
@@ -297,6 +297,9 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 | 2026-11-10 | images | Bootstrap chowns `/var/lib/orbit` + `/var/log/orbit` to `orbit` at boot (needs CAP_CHOWN) | Fresh volumes arrive root-owned; the `orbit` user couldn't write its own data dir | session-approved |
 | 2026-11-10 | 8.2 | OOM tests trigger genuine cgroup OOM via exponential shell-variable growth (`a=$a$a` loop) | `dd`/`head -c` allocations don't reliably OOM under busybox/alpine sh | session-approved |
 | 2026-11-10 | env | All Go test execution now happens in a Linux container (repo mounted, docker.sock passed for `-tags=runtime`); Windows WDAC blocks locally built binaries entirely | Container path replaces the blocked local execution; legit Linux environment, no security workarounds | session-approved |
+| 2026-11-10 | 9.2 | Dashboard uses 2s polling instead of SSE | The API has no event-stream endpoint yet; polling is simpler and works with the frozen contract. SSE = server-side work, revisit when the API grows a stream | session-approved |
+| 2026-11-10 | 9.1 | shadcn/ui component library skipped; plain Tailwind components | Only 4 small components exist; shadcn's generator + radix deps add nothing yet. Upgrade path: introduce shadcn if the dashboard grows | session-approved |
+| 2026-11-10 | api | openapi.yaml extended with /keys, /images, /instance-types, /capacity (were implemented in Phases 3–4 but undocumented) | Dashboard client is generated from the spec; spec must cover what the server serves. Contract drift found during 9.1 | session-approved |
 
 ## 5. Open Questions Carried Into Implementation
 

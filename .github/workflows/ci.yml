@@ -40,3 +40,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sh scripts/build-images.sh
+
+  dashboard:
+    # Phase 9 frontend: typecheck, build, component tests.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: orbit/dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: orbit/dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run generate:api
+      - run: npm run build
+      - run: npm test
