@@ -79,6 +79,13 @@ func (d *DockerAdapter) Create(ctx context.Context, spec UnitSpec) (string, erro
 
 	// Image may be absent locally; the caller's policy decides when to pull.
 	// Phase 1 keeps create pull-free; Phase 3 adds curated-image pulls.
+	// Join the Orbit bridge; subnet isolation per security.md §5.
+	nc := &network.NetworkingConfig{}
+	if spec.Network != "" {
+		nc.EndpointsConfig = map[string]*network.EndpointSettings{
+			spec.Network: {},
+		}
+	}
 	resp, err := d.cli.ContainerCreate(ctx,
 		&container.Config{
 			Image:  spec.Image,
@@ -87,7 +94,7 @@ func (d *DockerAdapter) Create(ctx context.Context, spec UnitSpec) (string, erro
 			Env:    spec.Env,
 		},
 		hc,
-		&network.NetworkingConfig{}, // Phase 5 attaches the orbit-net bridge
+		nc,
 		nil,
 		spec.Name,
 	)
@@ -144,6 +151,45 @@ func (d *DockerAdapter) HostResources(ctx context.Context) (float64, int, error)
 		return 0, 0, err
 	}
 	return float64(info.NCPU), int(info.MemTotal / 1024 / 1024), nil
+}
+
+// EnsureNetwork idempotently creates the bridge network. If it already
+// exists with a different subnet, the collision is reported (never rebuilt:
+// existing instances depend on it).
+func (d *DockerAdapter) EnsureNetwork(ctx context.Context, name, subnet string) error {
+	_, err := d.cli.NetworkInspect(ctx, name, network.InspectOptions{})
+	if err == nil {
+		return nil // exists; driver/subnet drift tolerated for MVP
+	}
+	if !client.IsErrNotFound(err) {
+		return err
+	}
+	ipam := &network.IPAM{Config: []network.IPAMConfig{{Subnet: subnet}}}
+	_, err = d.cli.NetworkCreate(ctx, name, network.CreateOptions{
+		Driver: "bridge",
+		IPAM:   ipam,
+	})
+	if err != nil {
+		return fmt.Errorf("create network %q: %w", name, err)
+	}
+	return nil
+}
+
+// IPAddress reports the unit's IP on the named network.
+func (d *DockerAdapter) IPAddress(ctx context.Context, id, networkName string) (string, error) {
+	info, err := d.cli.ContainerInspect(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	ns := info.NetworkSettings
+	if ns == nil || ns.Networks == nil {
+		return "", nil
+	}
+	ep, ok := ns.Networks[networkName]
+	if !ok || ep.IPAddress == "" {
+		return "", fmt.Errorf("unit %s has no address on %s", id, networkName)
+	}
+	return ep.IPAddress, nil
 }
 
 // PortBindings reports resolved host ports for the unit's published instance ports.

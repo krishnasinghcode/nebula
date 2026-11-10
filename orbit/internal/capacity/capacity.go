@@ -63,6 +63,7 @@ type Budget struct {
 	Instances     int     `json:"instances"`
 	MaxInstances  int     `json:"max_instances"`
 	QuotaMemoryMB int     `json:"quota_memory_mb"`
+	Subnet        string  `json:"subnet"`
 }
 
 // FreeCPUs / FreeMB are the schedulable leftovers.

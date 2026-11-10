@@ -197,6 +197,58 @@ func generateTestPubkey(t *testing.T) string {
 
 func pubFrom(priv ed25519.PrivateKey) ed25519.PublicKey { return priv.Public().(ed25519.PublicKey) }
 
+// Phase 5: PUT /v1/instances/{id}/ports — validation and state rules.
+func TestUpdatePortsEndpoint(t *testing.T) {
+	h := testAPI(t)
+
+	// Unknown instance -> 404.
+	if rec := do(t, h, "PUT", "/v1/instances/orb-nope/ports", map[string]any{}); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown instance: %d, want 404", rec.Code)
+	}
+
+	// Create + stop.
+	rec := do(t, h, "POST", "/v1/instances", validCreate())
+	var created struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &created)
+	for i := 0; i < 100; i++ {
+		rec = do(t, h, "GET", "/v1/instances/"+created.ID, nil)
+		if bytes.Contains(rec.Body.Bytes(), []byte(`"state":"running"`)) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	do(t, h, "POST", "/v1/instances/"+created.ID+"/stop", nil)
+	for i := 0; i < 100; i++ {
+		rec = do(t, h, "GET", "/v1/instances/"+created.ID, nil)
+		if bytes.Contains(rec.Body.Bytes(), []byte(`"state":"stopped"`)) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// Invalid bind -> 422.
+	rec = do(t, h, "PUT", "/v1/instances/"+created.ID+"/ports",
+		map[string]any{"ports": []map[string]any{{"instance_port": 80, "bind": "everywhere"}}})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("invalid bind: %d, want 422", rec.Code)
+	}
+
+	// Valid update -> 200 with loopback default.
+	rec = do(t, h, "PUT", "/v1/instances/"+created.ID+"/ports",
+		map[string]any{"ports": []map[string]any{{"instance_port": 80, "host_port": 8080}}})
+	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte(`"bind":"loopback"`)) {
+		t.Errorf("valid update: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// Capacity now reports the network honestly (5.4).
+	rec = do(t, h, "GET", "/v1/capacity", nil)
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"network"`)) {
+		t.Errorf("capacity missing network info: %s", rec.Body.String())
+	}
+}
+
 func TestAPIRequiresAuth(t *testing.T) {
 	h := testAPI(t)
 	rec := httptest.NewRecorder()

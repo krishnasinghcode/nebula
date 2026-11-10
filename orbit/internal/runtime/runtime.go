@@ -29,6 +29,7 @@ type UnitSpec struct {
 	MemoryMB       int
 	PidsLimit      int64
 	ReadOnlyRootFS bool
+	Network        string // bridge network the unit joins (empty = default)
 	Ports          []PortBinding
 }
 
@@ -64,6 +65,11 @@ type Adapter interface {
 	// HostResources reports the capacity envelope (see Docker Desktop caveat
 	// in the capacity package).
 	HostResources(ctx context.Context) (cpus float64, memoryMB int, err error)
+	// EnsureNetwork idempotently creates the bridge network with the given
+	// subnet. Collision with an existing different subnet is an error.
+	EnsureNetwork(ctx context.Context, name, subnet string) error
+	// IPAddress reports the unit's IP on the named network.
+	IPAddress(ctx context.Context, id, network string) (string, error)
 	// PortBindings reports resolved host ports for the unit's published
 	// instance ports (host port 0 = auto-allocated by the runtime).
 	PortBindings(ctx context.Context, id string) (map[int]int, error)

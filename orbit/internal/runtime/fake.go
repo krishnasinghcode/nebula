@@ -16,6 +16,11 @@ type FakeAdapter struct {
 	StartErr  error // returned by every Start
 	OpsErr    error // returned by Stop/Remove/Inspect
 	nextPort  int   // deterministic auto port allocation
+	nextIP    int   // deterministic fake private IPs (172.28.0.x)
+	NetName   string
+	NetSubnet string
+	NetErr    error // scripted EnsureNetwork failure
+	ips       map[string]string
 	HostCPUs  float64
 	HostMemMB int
 }
@@ -71,6 +76,14 @@ func (f *FakeAdapter) Start(_ context.Context, id string) error {
 		} else {
 			u.ports[p.InstancePort] = p.HostPort
 		}
+	}
+	// Assign a private IP on the unit's network (172.28.0.2, .3, ...).
+	if u.spec.Network != "" {
+		f.nextIP++
+		if f.ips == nil {
+			f.ips = map[string]string{}
+		}
+		f.ips[id] = fmt.Sprintf("172.28.0.%d", f.nextIP+1)
 	}
 	return nil
 }
@@ -147,6 +160,35 @@ func (f *FakeAdapter) PortBindings(_ context.Context, id string) (map[int]int, e
 	return out, nil
 }
 
+// EnsureNetwork records the network (idempotent like the Docker path).
+func (f *FakeAdapter) EnsureNetwork(_ context.Context, name, subnet string) error {
+	if f.NetErr != nil {
+		return f.NetErr
+	}
+	if f.NetName != "" && f.NetName != name {
+		return fmt.Errorf("network %q already exists as %q", name, f.NetName)
+	}
+	f.NetName, f.NetSubnet = name, subnet
+	return nil
+}
+
+// IPAddress reports the fake unit's deterministic address (172.28.0.2, .3, ...).
+func (f *FakeAdapter) IPAddress(_ context.Context, id, networkName string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	u, ok := f.units[id]
+	if !ok {
+		return "", fmt.Errorf("unit %q: %w", id, ErrMissing)
+	}
+	if networkName != u.spec.Network {
+		return "", fmt.Errorf("unit %s not on network %s", id, networkName)
+	}
+	if !u.running {
+		return "", nil
+	}
+	return f.ips[id], nil
+}
+
 // Scripted helpers for tests.
 
 // Exit simulates the unit's main process exiting.
@@ -156,6 +198,16 @@ func (f *FakeAdapter) Exit(id string, exitCode int, oom bool) {
 	if u, ok := f.units[id]; ok {
 		u.running, u.exited, u.exitCode, u.oom = false, true, exitCode, oom
 	}
+}
+
+// UnitSpecPorts exposes the created unit's port spec (test assertions).
+func (f *FakeAdapter) UnitSpecPorts(id string) []PortBinding {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if u, ok := f.units[id]; ok {
+		return u.spec.Ports
+	}
+	return nil
 }
 
 // Exists reports whether a unit is present (for leak checks).

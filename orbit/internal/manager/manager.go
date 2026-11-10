@@ -85,6 +85,54 @@ func (m *Manager) Create(ctx context.Context, in *store.Instance) (created *stor
 	return in, false, nil
 }
 
+// ensureUnit recreates the runtime unit if it is missing (e.g. after a
+// port-update recreation or an external removal).
+func (m *Manager) ensureUnit(ctx context.Context, in *store.Instance) error {
+	st, err := m.rt.Inspect(ctx, in.ID)
+	if err != nil {
+		return err
+	}
+	if st.State != "missing" {
+		return nil
+	}
+	spec, err := m.unitSpec(ctx, in)
+	if err != nil {
+		return err
+	}
+	if err := m.rt.EnsureNetwork(ctx, spec.Network, m.subnet()); err != nil {
+		return err
+	}
+	_, err = m.rt.Create(ctx, spec)
+	return err
+}
+
+// resolve saves the running unit's host ports and private IP into the record.
+func (m *Manager) resolve(ctx context.Context, id string) {
+	in, err := m.st.GetInstance(id)
+	if err != nil || in == nil {
+		return
+	}
+	if bindings, err := m.rt.PortBindings(ctx, id); err == nil {
+		changed := false
+		for i := range in.Ports {
+			if host, ok := bindings[in.Ports[i].InstancePort]; ok && host != in.Ports[i].HostPort {
+				in.Ports[i].HostPort = host
+				changed = true
+			}
+		}
+		if changed {
+			if err := m.st.SetInstancePorts(id, in.Ports); err != nil {
+				log.Printf("orbit: resolve(%s): save ports: %v", id, err)
+			}
+		}
+	}
+	if ip, err := m.rt.IPAddress(ctx, id, capacity.NetName); err == nil && ip != "" && ip != in.PrivateIP {
+		if err := m.st.SetInstanceFields(id, ip, ""); err != nil {
+			log.Printf("orbit: resolve(%s): save ip: %v", id, err)
+		}
+	}
+}
+
 // provision runs the runtime work for an asynchronously created instance.
 func (m *Manager) provision(ctx context.Context, id string) {
 	unlock := m.lock(id)
@@ -99,6 +147,10 @@ func (m *Manager) provision(ctx context.Context, id string) {
 		m.fail(id, "build unit spec: "+err.Error())
 		return
 	}
+	if err := m.rt.EnsureNetwork(ctx, spec.Network, m.subnet()); err != nil {
+		m.fail(id, "ensure network: "+err.Error())
+		return
+	}
 	unitID, err := m.rt.Create(ctx, spec)
 	if err != nil {
 		m.fail(id, "runtime create: "+err.Error())
@@ -109,17 +161,8 @@ func (m *Manager) provision(ctx context.Context, id string) {
 		m.fail(id, "runtime start: "+err.Error())
 		return
 	}
-	// Resolve auto-allocated host ports (SSH at minimum) into the record.
-	if bindings, err := m.rt.PortBindings(ctx, unitID); err == nil {
-		for i := range in.Ports {
-			if host, ok := bindings[in.Ports[i].InstancePort]; ok {
-				in.Ports[i].HostPort = host
-			}
-		}
-		if err := m.st.SetInstancePorts(in.ID, in.Ports); err != nil {
-			log.Printf("orbit: provision(%s): save ports: %v", id, err)
-		}
-	}
+	// Resolve auto-allocated host ports and the private IP into the record.
+	m.resolve(ctx, id)
 	if _, err := m.st.Transition(id, store.StateRunning, store.EventTransition,
 		"provisioned as unit "+unitID); err != nil {
 		m.fail(id, "state transition: "+err.Error())
@@ -162,8 +205,14 @@ func (m *Manager) unitSpec(ctx context.Context, in *store.Instance) (runtime.Uni
 	if !hasSSH {
 		ports = append(ports, store.Port{InstancePort: 22, HostPort: 0, Bind: "loopback"})
 	}
-	if err := m.st.SetInstancePorts(in.ID, ports); err != nil {
-		return runtime.UnitSpec{}, err
+	if len(ports) != len(in.Ports) {
+		if err := m.st.SetInstancePorts(in.ID, ports); err != nil {
+			return runtime.UnitSpec{}, err
+		}
+	}
+	specPorts := make([]runtime.PortBinding, len(ports))
+	for i, p := range ports {
+		specPorts[i] = runtime.PortBinding{InstancePort: p.InstancePort, HostPort: p.HostPort, Bind: p.Bind}
 	}
 
 	t := capacity.GetType(in.TypeID)
@@ -175,11 +224,85 @@ func (m *Manager) unitSpec(ctx context.Context, in *store.Instance) (runtime.Uni
 		Image:     dockerImage,
 		Labels:    map[string]string{"orbit.instance-id": in.ID, "orbit.name": in.Name},
 		Env:       env,
-		Ports:     []runtime.PortBinding{{InstancePort: 22, HostPort: 0, Bind: "loopback"}},
+		Network:   capacity.NetName,
+		Ports:     specPorts,
 		CPUs:      t.VCPU,
 		MemoryMB:  t.MemoryMB,
 		PidsLimit: 512,
 	}, nil
+}
+
+// subnet is the configured Orbit bridge subnet.
+func (m *Manager) subnet() string { return capacity.Subnet() }
+
+// UpdatePorts replaces the instance's published ports (PUT /ports).
+// Only stopped instances may be re-published; the unit is recreated on
+// the next start so the new bindings take effect.
+func (m *Manager) UpdatePorts(ctx context.Context, id string, ports []store.Port) (*store.Instance, error) {
+	unlock := m.lock(id)
+	defer unlock()
+
+	in, err := m.st.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	if in == nil {
+		return nil, ErrNotFound
+	}
+	if in.State != store.StateStopped {
+		return nil, &store.ConflictError{Message: fmt.Sprintf(
+			"instance %s is %s: stop it before changing port publishing", id, in.State)}
+	}
+	seenInstance, seenHost := map[int]bool{}, map[int]bool{}
+	for i := range ports {
+		p := &ports[i]
+		if p.InstancePort <= 0 || p.InstancePort > 65535 {
+			return nil, &store.ConflictError{Message: fmt.Sprintf("port %d: instance_port out of range", p.InstancePort)}
+		}
+		if seenInstance[p.InstancePort] {
+			return nil, &store.ConflictError{Message: fmt.Sprintf("duplicate instance_port %d", p.InstancePort)}
+		}
+		seenInstance[p.InstancePort] = true
+		if p.Bind == "" {
+			p.Bind = "loopback"
+		}
+		if p.Bind != "loopback" && p.Bind != "all" {
+			return nil, &store.ConflictError{Message: fmt.Sprintf("port %d: bind must be \"loopback\" or \"all\"", p.InstancePort)}
+		}
+		if p.Bind == "all" {
+			log.Printf("orbit: update-ports(%s): port %d published on all interfaces (0.0.0.0) — reachable from your LAN", id, p.InstancePort)
+		}
+		if p.HostPort != 0 && seenHost[p.HostPort] {
+			return nil, &store.ConflictError{Message: fmt.Sprintf("duplicate host_port %d", p.HostPort)}
+		}
+		seenHost[p.HostPort] = true
+	}
+	// Cross-instance host-port collisions.
+	live, err := m.st.ListInstances("")
+	if err != nil {
+		return nil, err
+	}
+	for _, other := range live {
+		if other.ID == id {
+			continue
+		}
+		for _, p := range other.Ports {
+			for i := range ports {
+				if ports[i].HostPort != 0 && ports[i].HostPort == p.HostPort {
+					return nil, &store.ConflictError{Message: fmt.Sprintf(
+						"host_port %d already used by instance %s", p.HostPort, other.ID)}
+				}
+			}
+		}
+	}
+	// Auto-allocated host ports reset: the recreated unit re-allocates.
+	if err := m.st.SetInstancePorts(id, ports); err != nil {
+		return nil, err
+	}
+	// Drop the old unit so the next start recreates it with new bindings.
+	_ = m.rt.Remove(ctx, id) // absent unit is fine
+	_ = m.st.AddEvent(id, store.EventTransition, "ports updated; unit will be recreated on next start")
+	return m.st.GetInstance(id)
 }
 
 // fail records an error state.
@@ -208,10 +331,15 @@ func (m *Manager) Action(ctx context.Context, id, action string) (*store.Instanc
 		if in, err = m.toState(in, store.StateRunning, "start"); err != nil {
 			return nil, err
 		}
+		if err := m.ensureUnit(ctx, in); err != nil {
+			m.fail(in.ID, "ensure unit: "+err.Error())
+			return m.st.GetInstance(in.ID)
+		}
 		if err := m.rt.Start(ctx, in.ID); err != nil {
 			m.fail(in.ID, "runtime start: "+err.Error())
 			return m.st.GetInstance(in.ID)
 		}
+		m.resolve(ctx, in.ID)
 		return m.st.GetInstance(in.ID)
 	case "stop":
 		if in, err = m.toState(in, store.StateStopping, "stop"); err != nil {

@@ -35,6 +35,7 @@ func (m *Manager) Budget(ctx context.Context) (Budget, error) {
 		},
 		MaxInstances:  Quotas.MaxInstances,
 		QuotaMemoryMB: Quotas.TotalMemoryMB,
+		Subnet:        Subnet(),
 	}
 	live, err := m.St.ListInstances("")
 	if err != nil {

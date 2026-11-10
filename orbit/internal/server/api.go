@@ -34,6 +34,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/instances/{id}/reboot", a.action("reboot"))
 	mux.HandleFunc("POST /v1/instances/{id}/terminate", a.action("terminate"))
 	mux.HandleFunc("GET /v1/instances/{id}/events", a.instanceEvents)
+	mux.HandleFunc("PUT /v1/instances/{id}/ports", a.updatePorts)
 
 	mux.HandleFunc("GET /v1/images", a.listImages)
 	mux.HandleFunc("GET /v1/instance-types", a.listTypes)
@@ -61,7 +62,41 @@ func (a *API) capacity(w http.ResponseWriter, r *http.Request) {
 			"cannot read host capacity: "+err.Error(), nil)
 		return
 	}
-	writeJSONBody(w, http.StatusOK, b)
+	// 5.4: be honest about the shared bridge — instance-to-instance traffic
+	// on orbit-net is unrestricted by design (security.md §5).
+	payload := struct {
+		capacity.Budget
+		Network map[string]string `json:"network"`
+	}{b, map[string]string{
+		"name":   capacity.NetName,
+		"subnet": b.Subnet,
+		"note":   "all instances share this bridge and can reach each other by private IP",
+	}}
+	writeJSONBody(w, http.StatusOK, payload)
+}
+
+type updatePortsReq struct {
+	Ports []store.Port `json:"ports"`
+}
+
+func (a *API) updatePorts(w http.ResponseWriter, r *http.Request) {
+	var req updatePortsReq
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		errorJSON(w, http.StatusBadRequest, "validation_failed", "invalid JSON body: "+err.Error(), nil)
+		return
+	}
+	in, err := a.Manager.UpdatePorts(r.Context(), r.PathValue("id"), req.Ports)
+	var ce *store.ConflictError
+	switch {
+	case err == nil:
+		writeJSONBody(w, http.StatusOK, in)
+	case errors.Is(err, manager.ErrNotFound):
+		errorJSON(w, http.StatusNotFound, "not_found", "instance not found", nil)
+	case errors.As(err, &ce):
+		errorJSON(w, http.StatusUnprocessableEntity, "validation_failed", ce.Message, nil)
+	default:
+		errorJSON(w, http.StatusInternalServerError, "internal_error", err.Error(), nil)
+	}
 }
 
 type createKeyReq struct {

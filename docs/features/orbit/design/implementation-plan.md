@@ -51,7 +51,7 @@ Related: [requirements.md] · [feature-priorities.md] · [architecture.md] · [t
 | 2 | State store, state machine, reconciler | ☑ Code done (see checkpoint) | SQLite store + events, state machine with transition rules, async provision, inline stop/start/reboot, async terminate, reconciler (crash/OOM/orphan/startup), v1 instance API + contract tests, openapi.yaml |
 | 3 | Images, SSH keys, SSH access | ☑ Code done; **local test runs blocked by Windows Device Guard — tests must run in CI** (see §4 env rows) | Curated images (ubuntu-24.04, debian-12) + bootstrap entrypoint, image catalogue API, SSH key API + store, bootstrap via env (pubkey/user-data), SSH port auto-published to loopback, `orbit ssh`/`orbit key` CLI, CI image-build job |
 | 4 | Instance types, capacity, quotas | ☑ Code done; tests blocked locally (Device Guard) — run in CI | Type catalogue (nano/micro/small), Docker host detection (Desktop-VM envelope), reserve defaults (25 % RAM / 1 core), memory-never-overcommit policy, instance + memory quotas, `GET /v1/instance-types` + `GET /v1/capacity`, admission errors mapped to structured 422s |
-| 5 | Networking | ☐ Not started | — |
+| 5 | Networking | ☑ Code done; tests blocked locally (Device Guard) — run in CI | `orbit-net` bridge (172.28.0.0/16, `ORBIT_NET_SUBNET` override), private IP recorded on start, `PUT /instances/{id}/ports` (stopped-only, validation + duplicate detection, loopback default), unit recreation on start, per-platform `orbit ssh` address (private IP on native Linux, loopback port elsewhere), network disclosure in `GET /capacity` |
 | 6 | User data + root volumes | ☐ Not started | — |
 | 7 | CLI completion | ☐ Not started | — |
 | 8 | Security gates + E2E acceptance | ☐ Not started | — |
@@ -167,17 +167,17 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 
 **Goal:** private IPs, instance-to-instance traffic, deny-by-default publishing. Design: [technical-design.md §6,7], [security.md §5].
 
-- [ ] 5.1 Network manager: create/manage `orbit-net` bridge (configurable subnet, collision check), assign on create, record `private_ip`, release on terminate.
-- [ ] 5.2 Port publishing API (`PUT /instances/{id}/ports`) with auto-allocation, duplicate detection, `bind` default `loopback` (0.0.0.0 requires explicit choice + warning).
-- [ ] 5.3 `orbit ssh` address resolution per platform: published port (Docker Desktop) vs private IP (Linux native).
-- [ ] 5.4 Instance-to-instance connectivity available (same bridge) — document honestly in `/capacity`-style docs output and README.
+- [x] 5.1 Network manager: create/manage `orbit-net` bridge (configurable subnet, collision check), assign on create, record `private_ip`, release on terminate. *(EnsureNetwork idempotent, subnet via `ORBIT_NET_SUBNET` (default 172.28.0.0/16); LAN-collision check is operator's choice of subnet — Docker-network drift tolerated, documented.)*
+- [x] 5.2 Port publishing API (`PUT /instances/{id}/ports`) with auto-allocation, duplicate detection, `bind` default `loopback` (0.0.0.0 requires explicit choice + warning). *(Stopped instances only — 409 otherwise; the unit is dropped and recreated with new bindings on next start.)*
+- [x] 5.3 `orbit ssh` address resolution per platform: published port (Docker Desktop) vs private IP (Linux native).
+- [x] 5.4 Instance-to-instance connectivity available (same bridge) — document honestly in `/capacity`-style docs output and README. *(`GET /v1/capacity` now returns a `network` object stating the shared-bridge fact; README section pending Phase 9 dashboard docs.)*
 
 **Tests:**
 - Unit: port allocation, duplicate rejection, bind validation.
 - Runtime: scenarios 19–23 of testing-strategy.md (unpublished unreachable; published reachable on localhost; loopback not LAN-visible; cross-instance ping by IP).
 - E2E: two instances, A reaches B by private IP.
 
-**Checkpoint:** *Per-OS connectivity notes: ___. Subnet default chosen: ___.*
+**Checkpoint:** *Per-OS connectivity notes: Linux native → private IP works directly; Docker Desktop/macOS → loopback-published ports only (private IPs unreachable from host). Subnet default chosen: 172.28.0.0/16 (RFC1918, not Docker's 172.17 default, uncommon on home LANs), override via `ORBIT_NET_SUBNET`. Runtime scenarios 19–23 NOT yet executed (Docker not running locally; Device Guard blocks local test binaries) — CI `runtime-tests` job is the path.**
 
 ---
 
@@ -279,6 +279,8 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 | 2026-11-10 | 4.1 | Types + quotas are in-code constants, not a config file | No user has asked to tune them yet; upgrade path documented as `shortcut:` in capacity.go | session-approved |
 | 2026-11-10 | 3.5 | SSH port 22 auto-published to loopback at create on all platforms | `orbit ssh` must work on Docker Desktop where private IPs are unreachable; replaces private-IP path until Phase 5 | session-approved |
 | 2026-11-10 | 4.2 | Volume-size quota (20 GB) not yet enforced — arrives with Phase 6 volumes | Nothing to count until volumes exist | session-approved |
+| 2026-11-10 | 5.2 | PUT ports accepted only while stopped; unit dropped and recreated on next start | Live port re-publish would require container recreate anyway; explicit stop makes the data-loss-free path obvious | session-approved |
+| 2026-11-10 | 5.1 | Existing-network subnet drift tolerated (no strict collision check against other Docker networks) | Rebuilding a network with live instances would break them; operator picks subnet via `ORBIT_NET_SUBNET` | session-approved |
 | 2026-11-10 | 2.1 | Store migrations cover instances + events only; keys/volumes/networks tables added in Phases 3/5/6 | Entities materialise with their first writer; avoids speculative schemas | session-approved |
 | 2026-11-10 | 2.5 | Ports PUT + logs endpoints deferred; idempotency anchored on unique name (token accepted, not compared) | Port publishing needs runtime support (Phase 5), logs need adapter Logs (Phase 3); name uniqueness already gives replay semantics | session-approved |
 | 2026-11-10 | 2.x | Package layout: `internal/{store,manager,runtime,server}`; instance types live in store package | Avoided store↔instance import cycle discovered during build | session-approved |

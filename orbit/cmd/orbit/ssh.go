@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"syscall"
 
 	"orbit/internal/server"
@@ -24,10 +25,11 @@ func newSSHCmd() *cobra.Command {
 			}
 			var resp struct {
 				Instance struct {
-					ID    string `json:"id"`
-					State string `json:"state"`
-					KeyID string `json:"key_id"`
-					Ports []struct {
+					ID        string `json:"id"`
+					State     string `json:"state"`
+					KeyID     string `json:"key_id"`
+					PrivateIP string `json:"private_ip"`
+					Ports     []struct {
 						InstancePort int `json:"instance_port"`
 						HostPort     int `json:"host_port"`
 					} `json:"ports"`
@@ -40,14 +42,21 @@ func newSSHCmd() *cobra.Command {
 			if in.State != "running" {
 				return fmt.Errorf("instance %s is %s; SSH needs a running instance", args[0], in.State)
 			}
-			hostPort := 0
-			for _, p := range in.Ports {
-				if p.InstancePort == 22 {
-					hostPort = p.HostPort
+			// Address resolution (plan 5.3): on native Linux the private IP
+			// is directly reachable; everywhere else (Docker Desktop) use
+			// the loopback-published SSH port.
+			host, port := "127.0.0.1", 0
+			if runtime.GOOS == "linux" && in.PrivateIP != "" {
+				host, port = in.PrivateIP, 22
+			} else {
+				for _, p := range in.Ports {
+					if p.InstancePort == 22 {
+						port = p.HostPort
+					}
 				}
 			}
-			if hostPort == 0 {
-				return fmt.Errorf("instance %s has no published SSH port", args[0])
+			if port == 0 {
+				return fmt.Errorf("instance %s has no reachable SSH address", args[0])
 			}
 			dir, err := server.DataDir()
 			if err != nil {
@@ -67,8 +76,8 @@ func newSSHCmd() *cobra.Command {
 				"ssh", "-i", keyPath,
 				"-o", "StrictHostKeyChecking=no", // shortcut: local-only, ephemeral instances; pin known_hosts when instances get stable addresses
 				"-o", "UserKnownHostsFile=/dev/null",
-				"-p", fmt.Sprint(hostPort),
-				"orbit@127.0.0.1",
+				"-p", fmt.Sprint(port),
+				"orbit@" + host,
 			}
 			if len(os.Args) > 2 {
 				cmdArgs = append(cmdArgs, os.Args[2:]...)

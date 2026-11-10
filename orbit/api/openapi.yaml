@@ -59,6 +59,22 @@ paths:
       responses:
         "200": { description: OK }
         "404": { $ref: "#/components/responses/Error" }
+  /instances/{id}/ports:
+    put:
+      summary: Replace published ports (stopped instances only; unit recreated on next start)
+      parameters: [{ $ref: "#/components/parameters/InstanceId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ports: { type: array, items: { $ref: "#/components/schemas/Port" } }
+      responses:
+        "200": { description: OK. Content: Instance }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer }
@@ -80,7 +96,7 @@ components:
       required: [instance_port, host_port, bind]
       properties:
         instance_port: { type: integer }
-        host_port: { type: integer, description: "0 = auto (resolved in Phase 5)" }
+        host_port: { type: integer, description: "0 = auto-allocated by the runtime; resolved value appears on describe" }
         bind: { type: string, enum: [loopback, all], default: loopback }
     CreateInstanceRequest:
       type: object
