@@ -16,6 +16,8 @@ type FakeAdapter struct {
 	StartErr  error // returned by every Start
 	OpsErr    error // returned by Stop/Remove/Inspect
 	nextPort  int   // deterministic auto port allocation
+	HostCPUs  float64
+	HostMemMB int
 }
 
 type fakeUnit struct {
@@ -120,6 +122,14 @@ func (f *FakeAdapter) Inspect(_ context.Context, id string) (Status, error) {
 	default:
 		return Status{State: "exited", ExitCode: u.exitCode}, nil
 	}
+}
+
+// HostResources reports the fake host envelope (tests configure it).
+func (f *FakeAdapter) HostResources(context.Context) (float64, int, error) {
+	if f.HostCPUs == 0 {
+		return 4, 8192, nil // test defaults
+	}
+	return f.HostCPUs, f.HostMemMB, nil
 }
 
 // PortBindings reports resolved host ports for published instance ports.

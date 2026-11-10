@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"orbit/internal/capacity"
 	"orbit/internal/catalogue"
 	"orbit/internal/manager"
 	"orbit/internal/store"
@@ -35,6 +36,8 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/instances/{id}/events", a.instanceEvents)
 
 	mux.HandleFunc("GET /v1/images", a.listImages)
+	mux.HandleFunc("GET /v1/instance-types", a.listTypes)
+	mux.HandleFunc("GET /v1/capacity", a.capacity)
 
 	mux.HandleFunc("POST /v1/keys", a.createKey)
 	mux.HandleFunc("GET /v1/keys", a.listKeys)
@@ -45,6 +48,20 @@ func (a *API) Register(mux *http.ServeMux) {
 // listImages serves the read-only curated catalogue.
 func (a *API) listImages(w http.ResponseWriter, _ *http.Request) {
 	writeJSONBody(w, http.StatusOK, catalogue.Images)
+}
+
+func (a *API) listTypes(w http.ResponseWriter, _ *http.Request) {
+	writeJSONBody(w, http.StatusOK, capacity.DefaultTypes)
+}
+
+func (a *API) capacity(w http.ResponseWriter, r *http.Request) {
+	b, err := a.Manager.Capacity(r.Context())
+	if err != nil {
+		errorJSON(w, http.StatusServiceUnavailable, "runtime_error",
+			"cannot read host capacity: "+err.Error(), nil)
+		return
+	}
+	writeJSONBody(w, http.StatusOK, b)
 }
 
 type createKeyReq struct {
@@ -159,9 +176,21 @@ func (a *API) createInstance(w http.ResponseWriter, r *http.Request) {
 		Name: req.Name, ImageID: req.ImageID, TypeID: req.TypeID, KeyID: req.KeyID,
 		UserData: req.UserData, Ports: ports, Owner: "local",
 	}
+	// Admission errors -> structured 422s; other errors -> 503/500.
 	created, existing, err := a.Manager.Create(r.Context(), in)
 	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, "internal_error", err.Error(), nil)
+		var ice *capacity.InsufficientCapacity
+		var qe *store.ConflictError
+		switch {
+		case errors.As(err, &ice):
+			errorJSON(w, http.StatusUnprocessableEntity, "insufficient_capacity", err.Error(), map[string]any{
+				"requested": ice.Requested, "available": ice.Available,
+			})
+		case errors.As(err, &qe):
+			errorJSON(w, http.StatusUnprocessableEntity, "quota_exceeded", err.Error(), nil)
+		default:
+			errorJSON(w, http.StatusInternalServerError, "internal_error", err.Error(), nil)
+		}
 		return
 	}
 	code := http.StatusAccepted // 202: async provisioning
@@ -178,9 +207,13 @@ func validateCreate(req createInstanceReq) string {
 	}
 	if req.ImageID == "" {
 		problems = append(problems, "image_id is required")
+	} else if catalogue.Get(req.ImageID) == nil {
+		problems = append(problems, "unknown image_id (see GET /v1/images)")
 	}
 	if req.TypeID == "" {
 		problems = append(problems, "type_id is required")
+	} else if capacity.GetType(req.TypeID) == nil {
+		problems = append(problems, "unknown type_id (see GET /v1/instance-types)")
 	}
 	if req.KeyID == "" {
 		problems = append(problems, "key_id is required")

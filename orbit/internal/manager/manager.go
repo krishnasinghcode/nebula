@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"orbit/internal/capacity"
 	"orbit/internal/catalogue"
 	"orbit/internal/runtime"
 	"orbit/internal/store"
@@ -27,12 +28,17 @@ var ErrNotFound = errors.New("not found")
 type Manager struct {
 	st    *store.Store
 	rt    runtime.Adapter
+	cap   *capacity.Manager
 	mu    sync.Mutex             // guards locks map
 	locks map[string]*sync.Mutex // one transition at a time per instance
 }
 
 func New(st *store.Store, rt runtime.Adapter) *Manager {
-	return &Manager{st: st, rt: rt, locks: map[string]*sync.Mutex{}}
+	return &Manager{
+		st:  st,
+		rt:  rt,
+		cap: &capacity.Manager{Detector: rt, St: st},
+	}
 }
 
 func (m *Manager) lock(id string) func() {
@@ -65,6 +71,12 @@ func (m *Manager) Create(ctx context.Context, in *store.Instance) (created *stor
 	}
 	in.ID = store.NewID()
 	in.State = store.StateProvisioning
+
+	// Admission control: capacity + quotas (memory never overcommitted).
+	if err := m.cap.Admit(ctx, in.TypeID, 1); err != nil {
+		return nil, false, err // caller maps to 422 (insufficient_capacity / quota_exceeded)
+	}
+
 	if err := m.st.CreateInstance(in); err != nil {
 		return nil, false, err
 	}
@@ -154,14 +166,18 @@ func (m *Manager) unitSpec(ctx context.Context, in *store.Instance) (runtime.Uni
 		return runtime.UnitSpec{}, err
 	}
 
+	t := capacity.GetType(in.TypeID)
+	if t == nil {
+		return runtime.UnitSpec{}, fmt.Errorf("unknown instance type %q", in.TypeID)
+	}
 	return runtime.UnitSpec{
 		Name:      in.ID,
 		Image:     dockerImage,
 		Labels:    map[string]string{"orbit.instance-id": in.ID, "orbit.name": in.Name},
 		Env:       env,
 		Ports:     []runtime.PortBinding{{InstancePort: 22, HostPort: 0, Bind: "loopback"}},
-		CPUs:      1,    // Phase 4: from instance type catalogue
-		MemoryMB:  1024, // Phase 4: from instance type catalogue
+		CPUs:      t.VCPU,
+		MemoryMB:  t.MemoryMB,
 		PidsLimit: 512,
 	}, nil
 }
@@ -299,6 +315,11 @@ func (m *Manager) Reconcile(ctx context.Context) {
 			}
 		}()
 	}
+}
+
+// Capacity exposes the current budget (GET /v1/capacity).
+func (m *Manager) Capacity(ctx context.Context) (capacity.Budget, error) {
+	return m.cap.Budget(ctx)
 }
 
 // Get returns one instance or ErrNotFound.

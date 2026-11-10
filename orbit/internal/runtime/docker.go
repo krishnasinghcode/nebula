@@ -135,7 +135,18 @@ func (d *DockerAdapter) Inspect(ctx context.Context, id string) (Status, error) 
 	return s, nil
 }
 
-// PortBindings resolves the host ports for published instance ports.
+// HostResources reports the capacity envelope (Engine-reported NCPU/MemTotal;
+// on Docker Desktop these are the Desktop VM's values, which is the envelope
+// that actually constrains containers).
+func (d *DockerAdapter) HostResources(ctx context.Context) (float64, int, error) {
+	info, err := d.cli.Info(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	return float64(info.NCPU), int(info.MemTotal / 1024 / 1024), nil
+}
+
+// PortBindings reports resolved host ports for the unit's published instance ports.
 func (d *DockerAdapter) PortBindings(ctx context.Context, id string) (map[int]int, error) {
 	info, err := d.cli.ContainerInspect(ctx, id)
 	if err != nil {

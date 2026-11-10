@@ -50,7 +50,7 @@ Related: [requirements.md] · [feature-priorities.md] · [architecture.md] · [t
 | 1 | Runtime adapter + skeleton | ☑ Code done; runtime tests pending first Docker-enabled run (local daemon was off) | Adapter interface `orbit/internal/runtime/runtime.go`, DockerAdapter + FakeAdapter, health reports runtime ping; CI runtime job added |
 | 2 | State store, state machine, reconciler | ☑ Code done (see checkpoint) | SQLite store + events, state machine with transition rules, async provision, inline stop/start/reboot, async terminate, reconciler (crash/OOM/orphan/startup), v1 instance API + contract tests, openapi.yaml |
 | 3 | Images, SSH keys, SSH access | ☑ Code done; **local test runs blocked by Windows Device Guard — tests must run in CI** (see §4 env rows) | Curated images (ubuntu-24.04, debian-12) + bootstrap entrypoint, image catalogue API, SSH key API + store, bootstrap via env (pubkey/user-data), SSH port auto-published to loopback, `orbit ssh`/`orbit key` CLI, CI image-build job |
-| 4 | Instance types, capacity, quotas | ☐ Not started | — |
+| 4 | Instance types, capacity, quotas | ☑ Code done; tests blocked locally (Device Guard) — run in CI | Type catalogue (nano/micro/small), Docker host detection (Desktop-VM envelope), reserve defaults (25 % RAM / 1 core), memory-never-overcommit policy, instance + memory quotas, `GET /v1/instance-types` + `GET /v1/capacity`, admission errors mapped to structured 422s |
 | 5 | Networking | ☐ Not started | — |
 | 6 | User data + root volumes | ☐ Not started | — |
 | 7 | CLI completion | ☐ Not started | — |
@@ -117,7 +117,7 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 - Integration (FakeAdapter): full create flow 202→`running`; reconcile scenarios — exited, OOM, orphaned, host-reboot (restart store+manager, assert `stopped`/`failed` ≤ 60 s), partial-create rollback; concurrent ops → single 409; events appended for every transition.
 - API: contract tests per endpoint incl. error shapes (validation_failed/unauthorized/conflict/quota codes); auth tests (no token 401, loopback binding asserted).
 
-**Verification:** unit + integration green; `orbit serve` survives kill -9 and reconciles on restart (manual smoke recorded in checkpoint). *(Unit + integration green locally 2026-11-10: manager (9 tests incl. host-reboot reconcile), server contract tests, runtime fakes. Manual kill-9 smoke pending — needs Docker running locally.)*
+**Verification:** unit + integration green; `orbit serve` survives kill -9 and reconciles on restart (manual smoke recorded in checkpoint). *(Unit + integration green locally 2026-11-10: manager (9 tests incl. host-reboot reconcile), server contract tests, runtime fakes. Manual kill-9 smoke pending — needs Docker running locally. **Phase 4 note:** capacity tests + updated manager/API tests written but NOT executed — Device Guard blocks local test binaries (see Phase 3 checkpoint); CI is the verification path.)*
 
 **Checkpoint:** *Migration tool used: inline migrations const (v1) in `orbit/internal/store/store.go` — no migration framework (shortcut: fine until schema drift becomes real; add versioned migrations if schema changes post-release). Store file: `<data-dir>/orbit.db` (default `~/.orbit/orbit.db`), WAL. Known deviations from data-and-api.md: ports PUT + logs endpoints deferred (Phases 5/3); idempotency anchored on unique name (token accepted but not compared); capacity admission pending Phase 4; image/type/key catalogue validation pending Phases 3–4. Package layout: `orbit/internal/{store,manager,runtime,server}`, types in store.*
 
@@ -149,10 +149,10 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 
 **Goal:** laptop protection + cloud-flavoured sizing. Design: [technical-design.md §3,12], [data-and-api.md §1.2].
 
-- [ ] 4.1 InstanceType catalogue (nano/micro/small) seeded from config; `GET /instance-types`.
-- [ ] 4.2 Capacity manager: read host resources from Docker Engine API (treat Desktop VM values as the envelope); apply default reserve (25 % RAM / 1 core) and quotas (5 instances, 8 GB, 20 GB) — all configurable; `GET /capacity` endpoint with used/free/limits.
-- [ ] 4.3 Admission control on create: requested ≤ budget AND ≤ quotas else `422` with requested-vs-available details (exact error shape per data-and-api.md §3.4).
-- [ ] 4.4 Resource limits mandatory: create without valid type is invalid (validation test).
+- [x] 4.1 InstanceType catalogue (nano/micro/small) seeded from config; `GET /instance-types`. *(In-code constants, not config file — see §4.)*
+- [x] 4.2 Capacity manager: read host resources from Docker Engine API (treat Desktop VM values as the envelope); apply default reserve (25 % RAM / 1 core) and quotas (5 instances, 8 GB, 20 GB) — all configurable; `GET /capacity` endpoint with used/free/limits. *(Reserve + quotas applied; 20 GB volume quota lands with volumes in Phase 6.)*
+- [x] 4.3 Admission control on create: requested ≤ budget AND ≤ quotas else `422` with requested-vs-available details (exact error shape per data-and-api.md §3.4).
+- [x] 4.4 Resource limits mandatory: create without valid type is invalid (validation test).
 
 **Tests:**
 - Unit: capacity math table-driven (reserve, multiple allocations, quota edges); overcommit policy (CPU allowed, memory never).
@@ -276,7 +276,9 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 | 2026-11-10 | env | **WDAC now blocks ALL locally built test binaries (any path).** Local verification = build/vet/gofmt only; tests require CI or a user policy exception | Device Guard policy on this machine disallows unsigned exes | n/a (environment) |
 | 2026-11-10 | 3.2 | Image catalogue is in-code, not a store table | Read-only data; persistence adds nothing | session-approved |
 | 2026-11-10 | 3.4 | Bootstrap payload delivered via env vars (`ORBIT_PUBKEY`, `ORBIT_USER_DATA_B64`) instead of a config-drive volume | Simplest reliable mechanism; visible only to same-user host processes locally. Upgrade path: per-instance volume mounted at `/var/lib/orbit` when volumes land (Phase 6) | session-approved |
+| 2026-11-10 | 4.1 | Types + quotas are in-code constants, not a config file | No user has asked to tune them yet; upgrade path documented as `shortcut:` in capacity.go | session-approved |
 | 2026-11-10 | 3.5 | SSH port 22 auto-published to loopback at create on all platforms | `orbit ssh` must work on Docker Desktop where private IPs are unreachable; replaces private-IP path until Phase 5 | session-approved |
+| 2026-11-10 | 4.2 | Volume-size quota (20 GB) not yet enforced — arrives with Phase 6 volumes | Nothing to count until volumes exist | session-approved |
 | 2026-11-10 | 2.1 | Store migrations cover instances + events only; keys/volumes/networks tables added in Phases 3/5/6 | Entities materialise with their first writer; avoids speculative schemas | session-approved |
 | 2026-11-10 | 2.5 | Ports PUT + logs endpoints deferred; idempotency anchored on unique name (token accepted, not compared) | Port publishing needs runtime support (Phase 5), logs need adapter Logs (Phase 3); name uniqueness already gives replay semantics | session-approved |
 | 2026-11-10 | 2.x | Package layout: `internal/{store,manager,runtime,server}`; instance types live in store package | Avoided store↔instance import cycle discovered during build | session-approved |

@@ -61,6 +61,9 @@ type Adapter interface {
 	Stop(ctx context.Context, id string, timeoutSecs int) error
 	Remove(ctx context.Context, id string) error
 	Inspect(ctx context.Context, id string) (Status, error)
+	// HostResources reports the capacity envelope (see Docker Desktop caveat
+	// in the capacity package).
+	HostResources(ctx context.Context) (cpus float64, memoryMB int, err error)
 	// PortBindings reports resolved host ports for the unit's published
 	// instance ports (host port 0 = auto-allocated by the runtime).
 	PortBindings(ctx context.Context, id string) (map[int]int, error)
