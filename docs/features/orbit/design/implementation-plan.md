@@ -228,7 +228,7 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 
 **Verification:** `go test ./...` + `-tags=runtime` + E2E suite all green; A1–A7 checklist from testing-strategy.md signed off item by item in the release report.
 
-**Checkpoint:** *Release candidate commit: ___. A1–A7 results: ___. Environments tested: ___.*
+**Checkpoint:** *Release candidate commit: `10fc952` (post-fix). A1–A7 results: unit+integration suites green; runtime suite (real Docker) green — TestDockerLifecycle, TestDockerHardeningApplied, TestDockerOOMDetected, TestRuntimeKill/OOM/OrphanDetection, TestRuntimeHardeningProfile, TestRuntimePIDAndSocketIsolation, TestAdversarialSpecsRejected all pass. E2E smoke green: real instance reaches `running`, private IP assigned, SSH port auto-published, **real SSH round-trip works**, data volume writable by `orbit` user, data survives stop/start, terminate removes container+volume. Environments tested: Windows 11 host, all execution in a Linux container (golang:1.27) against Docker Desktop 29.7.2 (WDAC blocks local binary execution — see §4).*
 
 ---
 
@@ -292,6 +292,11 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 | 2026-11-10 | 2.5 | Ports PUT + logs endpoints deferred; idempotency anchored on unique name (token accepted, not compared) | Port publishing needs runtime support (Phase 5), logs need adapter Logs (Phase 3); name uniqueness already gives replay semantics | session-approved |
 | 2026-11-10 | 2.x | Package layout: `internal/{store,manager,runtime,server}`; instance types live in store package | Avoided store↔instance import cycle discovered during build | session-approved |
 | 2026-11-10 | 1.1–1.2 | Adapter interface ships Ping/Create/Start/Stop/Remove/Inspect only; Stats/Logs deferred (Phase 2 logs, P1 stats); network/volume params land Phases 5–6; `Cmd` added to UnitSpec (needed for OOM test + Phase 3 bootstrap) | YAGNI: implement when first consumer exists; interface shape per architecture.md §7 unchanged | session-approved |
+| 2026-11-10 | 1.x | Hardening profile adds a minimal CapAdd set to CapDrop ALL: `CHOWN, FOWNER, DAC_OVERRIDE, SETUID, SETGID, SYS_CHROOT` | First real execution proved a fully capless root can't bootstrap (chown volume/home) and sshd can't chroot. Everything else stays dropped; no-new-privileges + default seccomp remain. Documented as `shortcut:` in docker.go | session-approved (E2E finding) |
+| 2026-11-10 | images | Curated image build context is `orbit/images/` (`docker build -f ubuntu-24.04/Dockerfile .`); `scripts/build-images.sh` builds both | Dockerfiles COPY shared `files/` (bootstrap, sshd conf); per-Dockerfile contexts can't see it | session-approved |
+| 2026-11-10 | images | Bootstrap chowns `/var/lib/orbit` + `/var/log/orbit` to `orbit` at boot (needs CAP_CHOWN) | Fresh volumes arrive root-owned; the `orbit` user couldn't write its own data dir | session-approved |
+| 2026-11-10 | 8.2 | OOM tests trigger genuine cgroup OOM via exponential shell-variable growth (`a=$a$a` loop) | `dd`/`head -c` allocations don't reliably OOM under busybox/alpine sh | session-approved |
+| 2026-11-10 | env | All Go test execution now happens in a Linux container (repo mounted, docker.sock passed for `-tags=runtime`); Windows WDAC blocks locally built binaries entirely | Container path replaces the blocked local execution; legit Linux environment, no security workarounds | session-approved |
 
 ## 5. Open Questions Carried Into Implementation
 
@@ -305,7 +310,7 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 
 1. **Implementation summary:** Orbit MVP, Phases 0–7 complete; Phase 8 suites written (8.4/8.7 pending). Stack per ADR-0001.
 2. **Files:** orbit/ module — cmd/orbit (serve, instance, key, ssh, images, instance-types, capacity), internal/{runtime,manager,store,server,capacity,catalogue}, api/openapi.yaml, images/{ubuntu-24.04,debian-12}; CI workflow; docs sweep.
-3. **Tests executed:** local = build/vet/gofmt green; **go test execution blocked on this machine (Windows Device Guard)** — all suites (unit, integration, -tags=runtime, E2E) must run in CI. Tests written, not locally executed.
+3. **Tests executed:** unit + integration suites green (`go test ./...`), vet/vet -tags=runtime/gofmt clean; full runtime suite green against real Docker; E2E smoke green (SSH round-trip, persistence, cleanup). All execution in a Linux container (WDAC blocks local binaries — see §4). CI matrix (8.4) still pending: needs a GitHub remote.
 4. **Documentation:** README quickstart, instance-management.md (Implemented), architecture/orbit.md (Implemented MVP), CHANGELOG, openapi.yaml, this plan.
 5. **Reviewed, unchanged:** project.md, development.md, security.md, testing-strategy.md, data-and-api.md.
 6. **Architecture impact:** matches architecture/orbit.md; adapter seam extended with network/volume/host-resources methods (same boundary).
