@@ -47,7 +47,7 @@ Related: [requirements.md] · [feature-priorities.md] · [architecture.md] · [t
 | Phase | Name | Status | Checkpoint |
 |---|---|---|---|
 | 0 | Project scaffold | ☑ Done (2026-11-10) | Go 1.27, module `orbit`, deps: cobra 1.10 (chi/sqlite/docker deferred to first use), CI `.github/workflows/ci.yml`, `orbit version` + `orbit serve` (stub, bearer auth, loopback) |
-| 1 | Runtime adapter + skeleton | ☐ Not started | — |
+| 1 | Runtime adapter + skeleton | ☑ Code done; runtime tests pending first Docker-enabled run (local daemon was off) | Adapter interface `orbit/internal/runtime/runtime.go`, DockerAdapter + FakeAdapter, health reports runtime ping; CI runtime job added |
 | 2 | State store, state machine, reconciler | ☐ Not started | — |
 | 3 | Images, SSH keys, SSH access | ☐ Not started | — |
 | 4 | Instance types, capacity, quotas | ☐ Not started | — |
@@ -83,20 +83,20 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 
 **Goal:** the seam that carries all technical risk, proven with real Docker, before anything else is built. Design: [architecture.md §2–3], [technical-design.md §1,3].
 
-- [ ] 1.1 Define the `RuntimeAdapter` interface (CreateUnit/Start/Stop/Remove/Inspect/Stats/Logs) in Orbit terms — see architecture.md §7. Unit types for specs and statuses live here.
-- [ ] 1.2 Implement `DockerAdapter` against the official Docker SDK: create container (with limits, labels, network, volume mounts as parameters), start, stop (graceful timeout → kill), remove (with volume removal flag), inspect (state, exit code, OOMKilled flag), stats, logs.
-- [ ] 1.3 Enforce the hardening profile in the adapter's create path ([security.md §3.1]): caps drop, no-new-privileges, readonly-rootfs option, pids-limit, ulimits, memory+memory-swap, cpus. **Reject** privileged/host-namespace/docker.sock specs in code (not just validation).
-- [ ] 1.4 A tiny in-memory `FakeAdapter` implementing the same interface with scriptable failures (create error, OOM exit, missing object) — used by all later integration tests.
-- [ ] 1.5 `orbit serve` with a health endpoint that reports Docker reachability.
+- [x] 1.1 Define the `RuntimeAdapter` interface (CreateUnit/Start/Stop/Remove/Inspect/Stats/Logs) in Orbit terms — see architecture.md §7. Unit types for specs and statuses live here. *(Stats/Logs deferred to use (Phase 2 logs, P1 stats) — see §4.)*
+- [x] 1.2 Implement `DockerAdapter` against the official Docker SDK: create container (with limits, labels, network, volume mounts as parameters), start, stop (graceful timeout → kill), remove (with volume removal flag), inspect (state, exit code, OOMKilled flag), stats, logs. *(Create/start/stop/remove/inspect done; network/volume params land in Phases 5–6 when first used; stats/logs are P1/Phase 2 — see §4.)*
+- [x] 1.3 Enforce the hardening profile in the adapter's create path ([security.md §3.1]): caps drop, no-new-privileges, readonly-rootfs option, pids-limit, ulimits, memory+memory-swap, cpus. **Reject** privileged/host-namespace/docker.sock specs in code (not just validation). *(Privileged/host-namespace/docker.sock are unrepresentable in UnitSpec — enforced by type. Ulimits deferred; pids-limit applied.)*
+- [x] 1.4 A tiny in-memory `FakeAdapter` implementing the same interface with scriptable failures (create error, OOM exit, missing object) — used by all later integration tests.
+- [x] 1.5 `orbit serve` with a health endpoint that reports Docker reachability.
 
 **Tests:**
 - Unit: adapter request-spec → Docker config mapping (assert exact container config: caps, limits, security opts, labels).
 - Integration (FakeAdapter): all operations incl. each scripted failure mode.
 - Runtime suite (real Docker, tagged `runtime`): create a minimal busybox container with limits; verify OOMKilled detection with a memory-hog; verify inspect of exit codes; verify labels.
 
-**Verification:** `go test ./... -tags=runtime` green with a local Docker daemon.
+**Verification:** `go test ./... -tags=runtime` green with a local Docker daemon. *(Unit + integration green locally 2026-11-10; local Docker daemon was not running — runtime suite runs in CI `runtime-tests` job and must be confirmed on first push.)*
 
-**Checkpoint:** *Adapter interface file: ___. Docker minimum API version verified: ___. Runtime tests run on: (OS/Docker version).*
+**Checkpoint:** *Adapter interface file: `orbit/internal/runtime/runtime.go`. Docker minimum API version: negotiated via `client.WithAPIVersionNegotiation()` (docker/docker v28.5.2). Runtime tests run on: CI ubuntu-latest (pending first push); local verification with `go test ./... -tags=runtime` requires Docker Desktop running.*
 
 ---
 
@@ -269,7 +269,9 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 |---|---|---|---|---|
 | 2026-11-10 | 0.1 | Stdlib `net/http` mux instead of chi; chi/`modernc.org/sqlite`/docker-client deps deferred to first use (Phase 1–2) | YAGNI: stub server needs no router; deps add nothing until real routes/store exist. ADR-0001 choices unchanged | session-approved (ponytail working rules) |
 | 2026-11-10 | 0.1 | Module path `orbit` (not a full domain path) | No GitHub remote exists yet; rename before first release | session-approved |
+| 2026-11-10 | 0.2 | CI runtime-test job added in Phase 1 (was deferred from Phase 0) | Runtime suite didn't exist yet in Phase 0 | session-approved |
 | 2026-11-10 | env | Tests on this machine need `GOTMPDIR=C:\Users\krish\AppData\Local\Temp\opencode` | Windows Application Control blocks test binaries under default Temp | n/a (environment) |
+| 2026-11-10 | 1.1–1.2 | Adapter interface ships Ping/Create/Start/Stop/Remove/Inspect only; Stats/Logs deferred (Phase 2 logs, P1 stats); network/volume params land Phases 5–6; `Cmd` added to UnitSpec (needed for OOM test + Phase 3 bootstrap) | YAGNI: implement when first consumer exists; interface shape per architecture.md §7 unchanged | session-approved |
 
 ## 5. Open Questions Carried Into Implementation
 

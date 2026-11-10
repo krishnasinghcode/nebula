@@ -20,3 +20,16 @@ jobs:
       - run: go build ./...
       - run: go test ./...
       - run: gofmt -l . | tee /dev/stderr | (! read)
+
+  runtime-tests:
+    # Real-Docker suite (adapter lifecycle, hardening, OOM).
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: orbit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: orbit/go.mod
+      - run: go test ./... -tags=runtime -v

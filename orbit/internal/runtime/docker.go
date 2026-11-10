@@ -1,0 +1,114 @@
+package runtime
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
+)
+
+// DockerAdapter implements Adapter against the Docker Engine API.
+// It enforces the Orbit hardening profile on every unit it creates
+// (docs/features/orbit/design/security.md §3.1).
+type DockerAdapter struct {
+	cli *client.Client
+}
+
+func NewDocker() (*DockerAdapter, error) {
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, fmt.Errorf("docker client: %w", err)
+	}
+	return &DockerAdapter{cli: cli}, nil
+}
+
+func (d *DockerAdapter) Ping(ctx context.Context) error {
+	_, err := d.cli.Ping(ctx)
+	return err
+}
+
+// hardening returns the security options every Orbit unit gets.
+// shortcut: capability set is ALL-dropped with no add-backs yet; curated
+// images in Phase 3 will declare any extra caps they genuinely need.
+func hardening() *container.HostConfig {
+	return &container.HostConfig{
+		// Resource limits are mandatory (memory never overcommitted).
+		CapDrop:       []string{"ALL"},
+		SecurityOpt:   []string{"no-new-privileges"},
+		RestartPolicy: container.RestartPolicy{Name: "no"}, // Orbit's reconciler owns restarts
+		// seccomp: Docker's default profile applies unless overridden;
+		// we never override it.
+	}
+}
+
+func (d *DockerAdapter) Create(ctx context.Context, spec UnitSpec) (string, error) {
+	if err := spec.validate(); err != nil {
+		return "", err
+	}
+	hc := hardening()
+	hc.Resources.NanoCPUs = int64(spec.CPUs * 1e9)
+	hc.Resources.Memory = int64(spec.MemoryMB) * 1024 * 1024
+	hc.Resources.MemorySwap = hc.Resources.Memory // no swap: limits are honest
+	hc.Resources.PidsLimit = &spec.PidsLimit
+	hc.ReadonlyRootfs = spec.ReadOnlyRootFS
+
+	// Image may be absent locally; the caller's policy decides when to pull.
+	// Phase 1 keeps create pull-free; Phase 3 adds curated-image pulls.
+	resp, err := d.cli.ContainerCreate(ctx,
+		&container.Config{
+			Image:  spec.Image,
+			Cmd:    spec.Cmd,
+			Labels: spec.Labels,
+			Env:    spec.Env,
+		},
+		hc,
+		&network.NetworkingConfig{}, // Phase 5 attaches the orbit-net bridge
+		nil,
+		spec.Name,
+	)
+	if err != nil {
+		return "", fmt.Errorf("create unit %q: %w", spec.Name, err)
+	}
+	return resp.ID, nil
+}
+
+func (d *DockerAdapter) Start(ctx context.Context, id string) error {
+	return d.cli.ContainerStart(ctx, id, container.StartOptions{})
+}
+
+func (d *DockerAdapter) Stop(ctx context.Context, id string, timeoutSecs int) error {
+	timeout := timeoutSecs
+	return d.cli.ContainerStop(ctx, id, container.StopOptions{Timeout: &timeout})
+}
+
+func (d *DockerAdapter) Remove(ctx context.Context, id string) error {
+	return d.cli.ContainerRemove(ctx, id, container.RemoveOptions{Force: false})
+}
+
+func (d *DockerAdapter) Inspect(ctx context.Context, id string) (Status, error) {
+	info, err := d.cli.ContainerInspect(ctx, id)
+	if err != nil {
+		if strings.Contains(err.Error(), "No such") || strings.Contains(err.Error(), "no such") {
+			return Status{State: "missing"}, nil
+		}
+		return Status{}, err
+	}
+	st := info.State
+	if st == nil {
+		return Status{State: "exited", Error: "no state reported"}, nil
+	}
+	s := Status{ExitCode: st.ExitCode, OOMKilled: st.OOMKilled}
+	switch {
+	case st.Running:
+		s.State = "running"
+	default:
+		s.State = "exited"
+	}
+	if st.Error != "" {
+		s.Error = st.Error
+	}
+	return s, nil
+}

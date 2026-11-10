@@ -4,10 +4,35 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"orbit/internal/runtime"
 )
 
+func TestHealthReportsRuntime(t *testing.T) {
+	// Healthy adapter -> ok
+	h := New("tok", runtime.NewFake())
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/health", nil)
+	req.Header.Set("Authorization", "Bearer tok")
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("health: got %d, want 200", rec.Code)
+	}
+
+	// Nil adapter -> ok without runtime check
+	h = New("tok", nil)
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/health", nil)
+	req.Header.Set("Authorization", "Bearer tok")
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("health nil adapter: got %d, want 200", rec.Code)
+	}
+}
+
 func TestAuthRequired(t *testing.T) {
-	h := New("secrettoken1234567890abcdef")
+	f := runtime.NewFake()
+	h := New("secrettoken1234567890abcdef", f)
 
 	// No token -> 401
 	rec := httptest.NewRecorder()

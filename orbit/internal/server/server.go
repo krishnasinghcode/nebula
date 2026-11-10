@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"orbit/internal/runtime"
 )
 
 // DataDir returns the orbit data directory (created if missing).
@@ -46,12 +48,19 @@ func LoadToken() (string, error) {
 	return token, nil
 }
 
-// New builds the control plane API server. Loopback-only listener is the
-// caller's responsibility (see Serve).
-func New(token string) http.Handler {
+// New builds the control plane API server. rt is the execution-environment
+// adapter (nil = skip runtime health reporting). Loopback-only listener is
+// the caller's responsibility (see Serve).
+func New(token string, rt runtime.Adapter) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		status, detail := "ok", ""
+		if rt != nil {
+			if err := rt.Ping(r.Context()); err != nil {
+				status, detail = "degraded", "runtime unreachable: "+err.Error()
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": status, "runtime": detail})
 	})
 	// Unknown routes still require auth before a 404 leaks route info.
 	return withAuth(token, mux)
