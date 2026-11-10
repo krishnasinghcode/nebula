@@ -7,8 +7,12 @@ package runtime
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
+
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 )
 
 func rtAdapter(t *testing.T) *DockerAdapter {
@@ -21,6 +25,13 @@ func rtAdapter(t *testing.T) *DockerAdapter {
 	t.Cleanup(cancel)
 	if err := d.Ping(ctx); err != nil {
 		t.Skipf("docker not reachable: %v", err)
+	}
+	// Ensure the test images exist (CI pre-pull equivalent).
+	for _, img := range []string{"alpine:3", "busybox:latest"} {
+		if rd, err := d.cli.ImagePull(ctx, img, image.PullOptions{}); err == nil {
+			_, _ = io.Copy(io.Discard, rd)
+			_ = rd.Close()
+		}
 	}
 	return d
 }
@@ -38,8 +49,8 @@ func TestRuntimeHardeningProfile(t *testing.T) {
 	d := rtAdapter(t)
 	ctx := context.Background()
 	name := "orbit-sec-audit"
-	_ = d.Remove(ctx, name)
-	defer d.Remove(ctx, name) //nolint:errcheck
+	_ = d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
+	defer d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true}) //nolint:errcheck
 
 	if _, err := d.Create(ctx, baseSpec(name)); err != nil {
 		t.Fatal(err)
@@ -78,8 +89,8 @@ func TestRuntimePIDAndSocketIsolation(t *testing.T) {
 	d := rtAdapter(t)
 	ctx := context.Background()
 	name := "orbit-sec-pid"
-	_ = d.Remove(ctx, name)
-	defer d.Remove(ctx, name) //nolint:errcheck
+	_ = d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
+	defer d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true}) //nolint:errcheck
 
 	spec := baseSpec(name)
 	spec.Cmd = []string{"sh", "-c", "ls /var/run/docker.sock >/dev/null 2>&1 && echo SOCKET || echo NOSOCKET; ps -o pid,comm | wc -l; sleep 60"}

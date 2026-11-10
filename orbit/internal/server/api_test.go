@@ -148,24 +148,24 @@ func TestKeysLifecycle(t *testing.T) {
 	h := testAPI(t)
 
 	// Invalid key material -> 422
-	rec := do(t, h, "POST", "/v1/keys", map[string]any{"name": "dev", "public_key": "not a key"})
+	rec := do(t, h, "POST", "/v1/keys", map[string]any{"name": "smoke", "public_key": "not a key"})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("invalid pubkey: %d, want 422", rec.Code)
 	}
 
 	pub := generateTestPubkey(t)
-	rec = do(t, h, "POST", "/v1/keys", map[string]any{"name": "dev", "public_key": pub})
+	rec = do(t, h, "POST", "/v1/keys", map[string]any{"name": "smoke", "public_key": pub})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create key: %d (%s), want 201", rec.Code, rec.Body.String())
 	}
 
 	// Duplicate -> 409
-	rec = do(t, h, "POST", "/v1/keys", map[string]any{"name": "dev", "public_key": pub})
+	rec = do(t, h, "POST", "/v1/keys", map[string]any{"name": "smoke", "public_key": pub})
 	if rec.Code != http.StatusConflict {
 		t.Errorf("duplicate key: %d, want 409", rec.Code)
 	}
 
-	// In-use deletion -> 409 (create an instance referencing it first)
+	// In-use deletion -> 409 (the instance references the seeded key "dev")
 	rec = do(t, h, "POST", "/v1/instances", validCreate())
 	for i := 0; i < 100 && !bytes.Contains(rec.Body.Bytes(), []byte(`"state":"running"`)); i++ {
 		time.Sleep(20 * time.Millisecond)

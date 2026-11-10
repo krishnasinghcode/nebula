@@ -84,8 +84,9 @@ func (b Budget) FreeMB() int       { return b.Host.SchedulableMB - b.UsedMemoryM
 // memory may NOT (an OOM-killed instance teaches the wrong lesson).
 func (b Budget) Admit(t Type, n int) error {
 	if b.Instances+n > b.MaxInstances {
-		return fmt.Errorf("quota exceeded: %d running + %d requested > max %d instances",
-			b.Instances, n, b.MaxInstances)
+		return &store.ConflictError{Message: fmt.Sprintf(
+			"quota exceeded: %d running + %d requested > max %d instances",
+			b.Instances, n, b.MaxInstances)}
 	}
 	if b.UsedMemoryMB+t.MemoryMB*n > b.QuotaMemoryMB {
 		return &store.ConflictError{Message: fmt.Sprintf(

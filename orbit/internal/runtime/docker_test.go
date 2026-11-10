@@ -5,8 +5,11 @@ package runtime
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
+
+	"github.com/docker/docker/api/types/image"
 )
 
 const busybox = "busybox:latest"
@@ -17,8 +20,13 @@ func dockerAdapter(t *testing.T) *DockerAdapter {
 	if err != nil {
 		t.Skipf("docker unavailable: %v", err)
 	}
-	if err := a.Ping(t.Context()); err != nil {
+	ctx := t.Context()
+	if err := a.Ping(ctx); err != nil {
 		t.Skipf("docker unreachable: %v", err)
+	}
+	if rd, err := a.cli.ImagePull(ctx, busybox, image.PullOptions{}); err == nil {
+		_, _ = io.Copy(io.Discard, rd)
+		_ = rd.Close()
 	}
 	return a
 }
@@ -100,8 +108,8 @@ func TestDockerOOMDetected(t *testing.T) {
 	id, err := a.Create(ctx, UnitSpec{
 		Name: "orbit-rt-oom", Image: busybox,
 		CPUs: 0.5, MemoryMB: 32, PidsLimit: 128,
-		// Allocate 64 MB in a 32 MB cgroup.
-		Cmd: []string{"sh", "-c", "dd if=/dev/zero bs=1M count=64 >/dev/null"},
+		// Exponential variable growth -> genuine cgroup OOM kill.
+		Cmd: []string{"sh", "-c", "a=x; while true; do a=$a$a; done"},
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)

@@ -10,7 +10,7 @@ import (
 func TestAdmitWithinCapacity(t *testing.T) {
 	b := Budget{
 		Host:         Host{TotalCPUs: 4, TotalMemoryMB: 8192, SchedulableCPU: 3, SchedulableMB: 6144},
-		MaxInstances: 5, QuotaMemoryMB: 8192,
+		MaxInstances: 5, QuotaMemoryMB: 8192, QuotaVolumeMB: Quotas.TotalVolumeMB,
 	}
 	micro := Type{ID: "orbit.micro", VCPU: 1, MemoryMB: 1024}
 	if err := b.Admit(micro, 1); err != nil {
@@ -21,7 +21,7 @@ func TestAdmitWithinCapacity(t *testing.T) {
 func TestAdmitInsufficientMemory(t *testing.T) {
 	b := Budget{
 		Host:         Host{TotalCPUs: 4, TotalMemoryMB: 2048, SchedulableCPU: 3, SchedulableMB: 1024},
-		MaxInstances: 5, QuotaMemoryMB: 8192,
+		MaxInstances: 5, QuotaMemoryMB: 8192, QuotaVolumeMB: Quotas.TotalVolumeMB,
 	}
 	small := Type{ID: "orbit.small", VCPU: 2, MemoryMB: 2048}
 	err := b.Admit(small, 1)
@@ -37,7 +37,7 @@ func TestAdmitInsufficientMemory(t *testing.T) {
 func TestAdmitMemoryQuota(t *testing.T) {
 	b := Budget{
 		Host:         Host{TotalCPUs: 16, TotalMemoryMB: 65536, SchedulableCPU: 15, SchedulableMB: 49152},
-		MaxInstances: 5, QuotaMemoryMB: 8192,
+		MaxInstances: 5, QuotaMemoryMB: 8192, QuotaVolumeMB: Quotas.TotalVolumeMB,
 	}
 	small := Type{ID: "orbit.small", VCPU: 2, MemoryMB: 2048}
 	err := b.Admit(small, 5) // 5*2048 = 10240 > 8192 quota
@@ -50,7 +50,7 @@ func TestAdmitMemoryQuota(t *testing.T) {
 func TestAdmitInstanceQuota(t *testing.T) {
 	b := Budget{
 		Host:      Host{TotalCPUs: 16, TotalMemoryMB: 65536, SchedulableCPU: 15, SchedulableMB: 49152},
-		Instances: 4, MaxInstances: 5, QuotaMemoryMB: 8192,
+		Instances: 5, MaxInstances: 5, QuotaMemoryMB: 8192, QuotaVolumeMB: Quotas.TotalVolumeMB,
 	}
 	nano := Type{ID: "orbit.nano", VCPU: 0.5, MemoryMB: 512}
 	if err := b.Admit(nano, 1); err == nil {
@@ -61,7 +61,7 @@ func TestAdmitInstanceQuota(t *testing.T) {
 func TestAdmitVolumeQuota(t *testing.T) {
 	b := Budget{
 		Host:         Host{TotalCPUs: 16, TotalMemoryMB: 65536, SchedulableCPU: 15, SchedulableMB: 49152},
-		UsedVolumeMB: Quotas.TotalVolumeMB - VolumeEstimateMB,
+		UsedVolumeMB: Quotas.TotalVolumeMB, // quota already exhausted
 		MaxInstances: 5, QuotaMemoryMB: 65536, QuotaVolumeMB: Quotas.TotalVolumeMB,
 	}
 	micro := Type{ID: "orbit.micro", VCPU: 1, MemoryMB: 1024}
@@ -75,7 +75,7 @@ func TestAdmitCPUOvercommitAllowed(t *testing.T) {
 	// CPU overcommit allowed up to TOTAL cpus (not schedulable) — quotas, not reservations.
 	b := Budget{
 		Host:     Host{TotalCPUs: 4, TotalMemoryMB: 16384, SchedulableCPU: 3, SchedulableMB: 12288},
-		UsedCPUs: 2.5, MaxInstances: 5, QuotaMemoryMB: 16384,
+		UsedCPUs: 2.5, MaxInstances: 5, QuotaMemoryMB: 16384, QuotaVolumeMB: Quotas.TotalVolumeMB,
 	}
 	micro := Type{ID: "orbit.micro", VCPU: 1, MemoryMB: 1024}
 	if err := b.Admit(micro, 1); err != nil {

@@ -33,6 +33,9 @@ func TestRootVolumeLifecycle(t *testing.T) {
 	if !f.HasVolume(want) {
 		t.Error("volume lost on stop")
 	}
+	if _, err := m.Action(ctx, in.ID, "start"); err != nil {
+		t.Fatal(err)
+	}
 	waitFor(t, m, in.ID, store.StateRunning)
 	if !f.HasVolume(want) {
 		t.Error("volume lost on start")

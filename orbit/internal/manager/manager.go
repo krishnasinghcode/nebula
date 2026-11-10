@@ -35,9 +35,10 @@ type Manager struct {
 
 func New(st *store.Store, rt runtime.Adapter) *Manager {
 	return &Manager{
-		st:  st,
-		rt:  rt,
-		cap: &capacity.Manager{Detector: rt, St: st},
+		st:    st,
+		rt:    rt,
+		cap:   &capacity.Manager{Detector: rt, St: st},
+		locks: map[string]*sync.Mutex{},
 	}
 }
 

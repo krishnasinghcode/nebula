@@ -8,6 +8,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/docker/docker/api/types/container"
 )
 
 // Scenario 10: guest main process killed -> Inspect reports exited with code.
@@ -15,8 +17,8 @@ func TestRuntimeKillDetection(t *testing.T) {
 	d := rtAdapter(t)
 	ctx := context.Background()
 	name := "orbit-rec-kill"
-	_ = d.Remove(ctx, name)
-	defer d.Remove(ctx, name) //nolint:errcheck
+	_ = d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
+	defer d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true}) //nolint:errcheck
 
 	spec := baseSpec(name)
 	spec.Cmd = []string{"sleep", "300"}
@@ -43,12 +45,13 @@ func TestRuntimeOOMDetection(t *testing.T) {
 	d := rtAdapter(t)
 	ctx := context.Background()
 	name := "orbit-rec-oom"
-	_ = d.Remove(ctx, name)
-	defer d.Remove(ctx, name) //nolint:errcheck
+	_ = d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
+	defer d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true}) //nolint:errcheck
 
 	spec := baseSpec(name)
 	spec.MemoryMB = 64 // tiny limit
-	spec.Cmd = []string{"sh", "-c", "dd if=/dev/zero bs=1M count=128 | tr '\\0' 'x' >/dev/null; sleep 60"}
+	// Exponential shell-variable growth -> genuine cgroup OOM kill.
+	spec.Cmd = []string{"sh", "-c", "a=x; while true; do a=$a$a; done"}
 	if _, err := d.Create(ctx, spec); err != nil {
 		t.Fatal(err)
 	}

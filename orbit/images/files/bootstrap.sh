@@ -6,6 +6,10 @@
 #   ORBIT_INSTANCE_META — JSON instance metadata (id, name, type)
 set -eu
 
+# The data volume (mounted at /var/lib/orbit) arrives root-owned; hand it to
+# the orbit user so user-data and runtime files are writable (needs CAP_CHOWN).
+install -d -o orbit -g orbit -m 750 /var/lib/orbit /var/log/orbit
+
 install -d -m 700 -o orbit -g orbit /home/orbit/.ssh
 printf '%s\n' "$ORBIT_PUBKEY" > /home/orbit/.ssh/authorized_keys
 chown orbit:orbit /home/orbit/.ssh/authorized_keys

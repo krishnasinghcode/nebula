@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY files/bootstrap.sh /usr/local/sbin/orbit-bootstrap
 COPY files/sshd-orbit.conf /etc/ssh/sshd_config.d/orbit.conf
+# Build from the images/ directory: docker build -f ubuntu-24.04/Dockerfile .
 RUN chmod +x /usr/local/sbin/orbit-bootstrap \
     && useradd -m -s /bin/bash -G sudo orbit \
     && echo 'orbit ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/orbit \

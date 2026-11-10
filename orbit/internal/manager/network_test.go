@@ -42,12 +42,6 @@ func TestUpdatePorts(t *testing.T) {
 	ctx := context.Background()
 	in, _, _ := m.Create(ctx, sample())
 	in = waitFor(t, m, in.ID, store.StateRunning)
-	sshHost := 0
-	for _, p := range in.Ports {
-		if p.InstancePort == 22 {
-			sshHost = p.HostPort
-		}
-	}
 
 	// Running instance -> conflict.
 	if _, err := m.UpdatePorts(ctx, in.ID, nil); err == nil {
@@ -65,9 +59,17 @@ func TestUpdatePorts(t *testing.T) {
 	if _, err := m.UpdatePorts(ctx, in.ID, []store.Port{{InstancePort: 80, Bind: "everywhere"}}); err == nil {
 		t.Fatal("invalid bind accepted")
 	}
-	// Cross-instance host_port collision rejected (SSH port of instance A).
+	// Cross-instance host_port collision: B's SSH port must be taken by A.
+	other, _, _ := m.Create(ctx, &store.Instance{Name: "web-2", ImageID: "ubuntu-24.04", TypeID: "orbit.micro", KeyID: "dev"})
+	other = waitFor(t, m, other.ID, store.StateRunning)
+	otherSSH := 0
+	for _, p := range other.Ports {
+		if p.InstancePort == 22 {
+			otherSSH = p.HostPort
+		}
+	}
 	var ce *store.ConflictError
-	if _, err := m.UpdatePorts(ctx, in.ID, []store.Port{{InstancePort: 80, HostPort: sshHost}}); !errors.As(err, &ce) {
+	if _, err := m.UpdatePorts(ctx, in.ID, []store.Port{{InstancePort: 80, HostPort: otherSSH}}); !errors.As(err, &ce) {
 		t.Fatalf("host_port collision not rejected: %v", err)
 	}
 
@@ -84,9 +86,25 @@ func TestUpdatePorts(t *testing.T) {
 	}
 
 	// Start recreates the unit with the new bindings and re-resolves.
+	if _, err := m.Action(ctx, in.ID, "start"); err != nil {
+		t.Fatal(err)
+	}
 	waitFor(t, m, in.ID, store.StateRunning)
 	specPorts := f.UnitSpecPorts(in.ID)
-	if len(specPorts) != 1 || specPorts[0].InstancePort != 80 || specPorts[0].HostPort != 8080 {
-		t.Errorf("recreated spec ports %+v, want 80->8080", specPorts)
+	// Expect the user's 80->8080 plus the auto-published SSH (22, loopback).
+	if len(specPorts) != 2 {
+		t.Fatalf("recreated spec ports %+v, want 80->8080 + SSH", specPorts)
+	}
+	found := false
+	for _, p := range specPorts {
+		if p.InstancePort == 80 && p.HostPort != 8080 {
+			t.Errorf("port 80 bound to %d, want 8080", p.HostPort)
+		}
+		if p.InstancePort == 80 {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("port 80 missing from spec: %+v", specPorts)
 	}
 }
