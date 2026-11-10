@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
@@ -85,6 +87,10 @@ func (d *DockerAdapter) Create(ctx context.Context, spec UnitSpec) (string, erro
 		nc.EndpointsConfig = map[string]*network.EndpointSettings{
 			spec.Network: {},
 		}
+	}
+	// Named data volumes (per-instance root data volume, technical-design §4).
+	for _, v := range spec.Volumes {
+		hc.Mounts = append(hc.Mounts, mount.Mount{Type: mount.TypeVolume, Source: v.Name, Target: v.Dest})
 	}
 	resp, err := d.cli.ContainerCreate(ctx,
 		&container.Config{
@@ -173,6 +179,31 @@ func (d *DockerAdapter) EnsureNetwork(ctx context.Context, name, subnet string) 
 		return fmt.Errorf("create network %q: %w", name, err)
 	}
 	return nil
+}
+
+// EnsureVolume idempotently creates a named data volume.
+func (d *DockerAdapter) EnsureVolume(ctx context.Context, name string) error {
+	_, err := d.cli.VolumeInspect(ctx, name)
+	if err == nil {
+		return nil
+	}
+	if !client.IsErrNotFound(err) {
+		return err
+	}
+	_, err = d.cli.VolumeCreate(ctx, volume.CreateOptions{Name: name})
+	if err != nil {
+		return fmt.Errorf("create volume %q: %w", name, err)
+	}
+	return nil
+}
+
+// RemoveVolume deletes a named data volume (missing = ok).
+func (d *DockerAdapter) RemoveVolume(ctx context.Context, name string) error {
+	err := d.cli.VolumeRemove(ctx, name, false)
+	if err != nil && client.IsErrNotFound(err) {
+		return nil
+	}
+	return err
 }
 
 // IPAddress reports the unit's IP on the named network.

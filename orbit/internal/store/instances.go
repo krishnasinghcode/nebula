@@ -147,6 +147,13 @@ func (s *Store) SetInstancePorts(id string, ports []Port) error {
 	return err
 }
 
+// SetInstanceRootVolume records the named data volume after provisioning.
+func (s *Store) SetInstanceRootVolume(id, volumeID string) error {
+	_, err := s.db.Exec(`UPDATE instances SET root_volume_id=?, updated_at=? WHERE id=?`,
+		volumeID, time.Now().UTC().Format(time.RFC3339), id)
+	return err
+}
+
 // SetInstanceFields updates mutable metadata (private_ip, transition_error).
 func (s *Store) SetInstanceFields(id string, privateIP, transitionError string) error {
 	_, err := s.db.Exec(`UPDATE instances SET private_ip=?, transition_error=?, updated_at=? WHERE id=?`,

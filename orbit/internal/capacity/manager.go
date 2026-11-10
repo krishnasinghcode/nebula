@@ -35,6 +35,7 @@ func (m *Manager) Budget(ctx context.Context) (Budget, error) {
 		},
 		MaxInstances:  Quotas.MaxInstances,
 		QuotaMemoryMB: Quotas.TotalMemoryMB,
+		QuotaVolumeMB: Quotas.TotalVolumeMB,
 		Subnet:        Subnet(),
 	}
 	live, err := m.St.ListInstances("")
@@ -52,6 +53,7 @@ func (m *Manager) Budget(ctx context.Context) (Budget, error) {
 		b.Instances++
 		b.UsedCPUs += t.VCPU
 		b.UsedMemoryMB += t.MemoryMB
+		b.UsedVolumeMB += VolumeEstimateMB
 	}
 	return b, nil
 }

@@ -48,6 +48,14 @@ paths:
     post:
       summary: Terminate an instance (irreversible)
       parameters: [{ $ref: "#/components/parameters/InstanceId" }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                keep_root_volume: { type: boolean, default: false, description: "Keep the named root data volume (orbit-<id>)" }
       responses:
         "202": { description: Accepted; terminating }
         "404": { $ref: "#/components/responses/Error" }

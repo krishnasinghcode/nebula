@@ -12,7 +12,7 @@ COPY files/sshd-orbit.conf /etc/ssh/sshd_config.d/orbit.conf
 RUN chmod +x /usr/local/sbin/orbit-bootstrap \
     && useradd -m -s /bin/bash -G sudo orbit \
     && echo 'orbit ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/orbit \
-    && mkdir -p /var/run/sshd /var/lib/orbit
+    && mkdir -p /var/run/sshd /var/lib/orbit /var/log/orbit
 
 EXPOSE 22
 CMD ["/usr/local/sbin/orbit-bootstrap"]

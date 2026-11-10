@@ -52,7 +52,7 @@ Related: [requirements.md] · [feature-priorities.md] · [architecture.md] · [t
 | 3 | Images, SSH keys, SSH access | ☑ Code done; **local test runs blocked by Windows Device Guard — tests must run in CI** (see §4 env rows) | Curated images (ubuntu-24.04, debian-12) + bootstrap entrypoint, image catalogue API, SSH key API + store, bootstrap via env (pubkey/user-data), SSH port auto-published to loopback, `orbit ssh`/`orbit key` CLI, CI image-build job |
 | 4 | Instance types, capacity, quotas | ☑ Code done; tests blocked locally (Device Guard) — run in CI | Type catalogue (nano/micro/small), Docker host detection (Desktop-VM envelope), reserve defaults (25 % RAM / 1 core), memory-never-overcommit policy, instance + memory quotas, `GET /v1/instance-types` + `GET /v1/capacity`, admission errors mapped to structured 422s |
 | 5 | Networking | ☑ Code done; tests blocked locally (Device Guard) — run in CI | `orbit-net` bridge (172.28.0.0/16, `ORBIT_NET_SUBNET` override), private IP recorded on start, `PUT /instances/{id}/ports` (stopped-only, validation + duplicate detection, loopback default), unit recreation on start, per-platform `orbit ssh` address (private IP on native Linux, loopback port elsewhere), network disclosure in `GET /capacity` |
-| 6 | User data + root volumes | ☐ Not started | — |
+| 6 | User data + root volumes | ☑ Code done; tests blocked locally (Device Guard) — run in CI | user-data validation (≤16 KiB, shebang) already enforced; bootstrap log `/var/log/orbit/bootstrap.log`; per-instance named volume `orbit-<id>` at `/var/lib/orbit`, recorded as `root_volume_id`, deleted on terminate unless `keep_root_volume`; volume quota 20 GB (1 GB flat estimate/instance); metadata file already present |
 | 7 | CLI completion | ☐ Not started | — |
 | 8 | Security gates + E2E acceptance | ☐ Not started | — |
 | 9 | Dashboard (React/TS) | ☐ Not started — starts only after Phase 2 API is frozen | — |
@@ -185,16 +185,16 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 
 **Goal:** run real workloads at boot; persistence semantics. Design: [technical-design.md §4,8], [security.md §6.3].
 
-- [ ] 6.1 Bootstrap consumes user-data (shell, ≤ 16 KiB, shebang required): executes once, logs to `/var/log/orbit/bootstrap.log`, marker prevents re-run on restart; booting→running reflects completion.
-- [ ] 6.2 Per-instance named root volume (read-only rootfs + writable data volume); persistence across stop/start; deletion on terminate unless keep-flag.
-- [ ] 6.3 Metadata file inside instance (id, name, type) at a fixed path (HTTP endpoint stays P1).
-- [ ] 6.4 Total-volume quota accounting in capacity manager.
+- [x] 6.1 Bootstrap consumes user-data (shell, ≤ 16 KiB, shebang required): executes once, logs to `/var/log/orbit/bootstrap.log`, marker prevents re-run on restart; booting→running reflects completion. *(Validation + once-marker + log path done. Marker/user-data now live on the persistent data volume, so they also survive unit recreation. "booting→running reflects completion" stays approximated by provisioning→running (bootstrap failure does not yet flip state — needs guest→host signalling, deferred, see §4).)*
+- [x] 6.2 Per-instance named root volume (read-only rootfs + writable data volume); persistence across stop/start; deletion on terminate unless keep-flag. *(Named volume `orbit-<id>` mounted at `/var/lib/orbit`; survives stop/start and unit recreation; terminate deletes unless `keep_root_volume: true` in body. shortcut: rootfs NOT read-only yet — sshd needs writable /run//etc/ssh on boot; needs tmpfs polish in images, deferred to Phase 8 hardening.)*
+- [x] 6.3 Metadata file inside instance (id, name, type) at a fixed path (HTTP endpoint stays P1). *(Done in Phase 3: `/var/lib/orbit/metadata.json`, now on the persistent volume.)*
+- [x] 6.4 Total-volume quota accounting in capacity manager. *(20 GB default; flat 1 GB estimate per instance — Docker local volumes have no native size enforcement (technical-design §4); real disk limits = P1.)*
 
 **Tests:**
 - Integration: user-data runs once (restart → not re-run); oversized/no-shebang rejected; bootstrap failure → `failed` + reason.
 - Runtime/E2E: scenario 24 (data survives stop/start, destroyed on terminate); A7 full story: create with user-data web server → publish port → curl from host → second instance curls first by IP → stop → start → data intact → terminate clean.
 
-**Checkpoint:** *Bootstrap log path: ___. E2E A7 result: ___.*
+**Checkpoint:** *Bootstrap log path: `/var/log/orbit/bootstrap.log` (in-guest). E2E A7 result: NOT RUN — needs Docker (runtime/E2E scenarios blocked locally; CI path). Volume semantics: `orbit-<id>` named volume, `/var/lib/orbit` mount, 1 GB flat estimate against 20 GB quota.**
 
 ---
 
@@ -281,6 +281,9 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 | 2026-11-10 | 4.2 | Volume-size quota (20 GB) not yet enforced — arrives with Phase 6 volumes | Nothing to count until volumes exist | session-approved |
 | 2026-11-10 | 5.2 | PUT ports accepted only while stopped; unit dropped and recreated on next start | Live port re-publish would require container recreate anyway; explicit stop makes the data-loss-free path obvious | session-approved |
 | 2026-11-10 | 5.1 | Existing-network subnet drift tolerated (no strict collision check against other Docker networks) | Rebuilding a network with live instances would break them; operator picks subnet via `ORBIT_NET_SUBNET` | session-approved |
+| 2026-11-10 | 6.2 | Rootfs not read-only yet; data volume mounted at `/var/lib/orbit` only | sshd + bootstrap need writable /run, /etc/ssh, /home; RO-rootfs requires tmpfs work in curated images → Phase 8 hardening | session-approved |
+| 2026-11-10 | 6.4 | Volume quota counts a flat 1 GB estimate per instance (20 GB default) | Docker local volumes have no size enforcement (design §4); real disk limits = P1 | session-approved |
+| 2026-11-10 | 6.1 | Bootstrap failure does not flip instance to `failed` | Needs guest→host signalling (e.g. healthcheck/label); MVP keeps user-data failures visible only in the log | session-approved |
 | 2026-11-10 | 2.1 | Store migrations cover instances + events only; keys/volumes/networks tables added in Phases 3/5/6 | Entities materialise with their first writer; avoids speculative schemas | session-approved |
 | 2026-11-10 | 2.5 | Ports PUT + logs endpoints deferred; idempotency anchored on unique name (token accepted, not compared) | Port publishing needs runtime support (Phase 5), logs need adapter Logs (Phase 3); name uniqueness already gives replay semantics | session-approved |
 | 2026-11-10 | 2.x | Package layout: `internal/{store,manager,runtime,server}`; instance types live in store package | Avoided store↔instance import cycle discovered during build | session-approved |

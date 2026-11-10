@@ -21,6 +21,7 @@ type FakeAdapter struct {
 	NetSubnet string
 	NetErr    error // scripted EnsureNetwork failure
 	ips       map[string]string
+	volumes   map[string]bool
 	HostCPUs  float64
 	HostMemMB int
 }
@@ -170,6 +171,32 @@ func (f *FakeAdapter) EnsureNetwork(_ context.Context, name, subnet string) erro
 	}
 	f.NetName, f.NetSubnet = name, subnet
 	return nil
+}
+
+// EnsureVolume idempotently creates a named volume.
+func (f *FakeAdapter) EnsureVolume(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.volumes == nil {
+		f.volumes = map[string]bool{}
+	}
+	f.volumes[name] = true
+	return nil
+}
+
+// RemoveVolume deletes a named volume (missing = ok).
+func (f *FakeAdapter) RemoveVolume(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.volumes, name)
+	return nil
+}
+
+// HasVolume reports whether a volume exists (test assertions).
+func (f *FakeAdapter) HasVolume(name string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.volumes[name]
 }
 
 // IPAddress reports the fake unit's deterministic address (172.28.0.2, .3, ...).

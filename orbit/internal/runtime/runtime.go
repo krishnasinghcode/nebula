@@ -30,7 +30,14 @@ type UnitSpec struct {
 	PidsLimit      int64
 	ReadOnlyRootFS bool
 	Network        string // bridge network the unit joins (empty = default)
+	Volumes        []VolumeMount
 	Ports          []PortBinding
+}
+
+// VolumeMount attaches a named data volume at a fixed destination.
+type VolumeMount struct {
+	Name string
+	Dest string
 }
 
 func (s UnitSpec) validate() error {
@@ -42,6 +49,11 @@ func (s UnitSpec) validate() error {
 	}
 	if s.CPUs <= 0 {
 		return fmt.Errorf("unit spec requires a positive CPU limit")
+	}
+	for _, v := range s.Volumes {
+		if v.Name == "" || v.Dest == "" {
+			return fmt.Errorf("volume mounts require name and destination")
+		}
 	}
 	return nil
 }
@@ -70,6 +82,10 @@ type Adapter interface {
 	EnsureNetwork(ctx context.Context, name, subnet string) error
 	// IPAddress reports the unit's IP on the named network.
 	IPAddress(ctx context.Context, id, network string) (string, error)
+	// EnsureVolume idempotently creates a named data volume.
+	EnsureVolume(ctx context.Context, name string) error
+	// RemoveVolume deletes a named data volume (missing = ok).
+	RemoveVolume(ctx context.Context, name string) error
 	// PortBindings reports resolved host ports for the unit's published
 	// instance ports (host port 0 = auto-allocated by the runtime).
 	PortBindings(ctx context.Context, id string) (map[int]int, error)

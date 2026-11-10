@@ -102,6 +102,9 @@ func (m *Manager) ensureUnit(ctx context.Context, in *store.Instance) error {
 	if err := m.rt.EnsureNetwork(ctx, spec.Network, m.subnet()); err != nil {
 		return err
 	}
+	if err := m.rt.EnsureVolume(ctx, RootVolumeName(in.ID)); err != nil {
+		return err
+	}
 	_, err = m.rt.Create(ctx, spec)
 	return err
 }
@@ -133,6 +136,10 @@ func (m *Manager) resolve(ctx context.Context, id string) {
 	}
 }
 
+// RootVolumeName is the per-instance named data volume (technical-design §4).
+// It persists across stop/start and recreate; deleted on terminate unless kept.
+func RootVolumeName(instanceID string) string { return "orbit-" + instanceID }
+
 // provision runs the runtime work for an asynchronously created instance.
 func (m *Manager) provision(ctx context.Context, id string) {
 	unlock := m.lock(id)
@@ -149,6 +156,15 @@ func (m *Manager) provision(ctx context.Context, id string) {
 	}
 	if err := m.rt.EnsureNetwork(ctx, spec.Network, m.subnet()); err != nil {
 		m.fail(id, "ensure network: "+err.Error())
+		return
+	}
+	vol := RootVolumeName(id)
+	if err := m.rt.EnsureVolume(ctx, vol); err != nil {
+		m.fail(id, "ensure volume: "+err.Error())
+		return
+	}
+	if err := m.st.SetInstanceRootVolume(id, vol); err != nil {
+		m.fail(id, "record volume: "+err.Error())
 		return
 	}
 	unitID, err := m.rt.Create(ctx, spec)
@@ -225,6 +241,7 @@ func (m *Manager) unitSpec(ctx context.Context, in *store.Instance) (runtime.Uni
 		Labels:    map[string]string{"orbit.instance-id": in.ID, "orbit.name": in.Name},
 		Env:       env,
 		Network:   capacity.NetName,
+		Volumes:   []runtime.VolumeMount{{Name: RootVolumeName(in.ID), Dest: "/var/lib/orbit"}},
 		Ports:     specPorts,
 		CPUs:      t.VCPU,
 		MemoryMB:  t.MemoryMB,
@@ -363,7 +380,7 @@ func (m *Manager) Action(ctx context.Context, id, action string) (*store.Instanc
 		if in, err = m.toState(in, store.StateTerminating, "terminate"); err != nil {
 			return nil, err
 		}
-		go m.finishTerminate(context.Background(), in.ID)
+		go m.finishTerminate(context.Background(), in.ID, false)
 		return in, nil
 	default:
 		return nil, fmt.Errorf("unknown action %q", action)
@@ -386,18 +403,38 @@ func (m *Manager) finishStop(ctx context.Context, in *store.Instance) (*store.In
 	return m.st.Transition(in.ID, store.StateStopped, store.EventTransition, "stopped")
 }
 
-func (m *Manager) finishTerminate(ctx context.Context, id string) {
+func (m *Manager) finishTerminate(ctx context.Context, id string, keepRootVolume bool) {
 	unlock := m.lock(id)
 	defer unlock()
 	// Ignore stop errors: removal proceeds even if the unit already exited.
 	_ = m.rt.Stop(ctx, id, 30)
-	// Root-volume removal arrives with volumes (Phase 6); containers only now.
+	// Root data volume is deleted unless the user kept it (technical-design §4).
 	if err := m.rt.Remove(ctx, id); err != nil {
 		log.Printf("orbit: terminate(%s): remove: %v", id, err)
+	}
+	if !keepRootVolume {
+		if err := m.rt.RemoveVolume(ctx, RootVolumeName(id)); err != nil {
+			log.Printf("orbit: terminate(%s): remove volume: %v", id, err)
+		}
+	} else {
+		_ = m.st.AddEvent(id, store.EventTransition, "root volume kept: "+RootVolumeName(id))
 	}
 	if _, err := m.st.Transition(id, store.StateTerminated, store.EventTransition, "terminated"); err != nil {
 		log.Printf("orbit: terminate(%s): %v", id, err)
 	}
+}
+
+// Terminate terminates an instance, optionally keeping its root data volume.
+func (m *Manager) Terminate(ctx context.Context, id string, keepRootVolume bool) (*store.Instance, error) {
+	in, err := m.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if in, err = m.toState(in, store.StateTerminating, "terminate"); err != nil {
+		return nil, err
+	}
+	go m.finishTerminate(context.Background(), id, keepRootVolume)
+	return in, nil
 }
 
 // Reconcile compares desired vs actual state for all non-terminal instances

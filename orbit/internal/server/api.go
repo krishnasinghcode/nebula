@@ -290,7 +290,21 @@ func (a *API) describeInstance(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) action(action string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		in, err := a.Manager.Action(r.Context(), r.PathValue("id"), action)
+		var err error
+		var in *store.Instance
+		switch action {
+		case "terminate":
+			// Optional body: {"keep_root_volume": true} keeps the named data volume.
+			var body struct {
+				KeepRootVolume bool `json:"keep_root_volume"`
+			}
+			if r.Body != nil {
+				_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body)
+			}
+			in, err = a.Manager.Terminate(r.Context(), r.PathValue("id"), body.KeepRootVolume)
+		default:
+			in, err = a.Manager.Action(r.Context(), r.PathValue("id"), action)
+		}
 		switch {
 		case errors.Is(err, manager.ErrNotFound):
 			errorJSON(w, http.StatusNotFound, "not_found", "instance not found", nil)

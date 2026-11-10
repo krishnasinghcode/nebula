@@ -41,9 +41,16 @@ func GetType(id string) *Type {
 var Quotas = struct {
 	MaxInstances  int
 	TotalMemoryMB int
+	TotalVolumeMB int
 	ReserveCPUs   float64 // kept for the host
 	ReserveMemPct float64 // percent of detected memory kept for the host
-}{MaxInstances: 5, TotalMemoryMB: 8192, ReserveCPUs: 1, ReserveMemPct: 25}
+}{MaxInstances: 5, TotalMemoryMB: 8192, TotalVolumeMB: 20480, ReserveCPUs: 1, ReserveMemPct: 25}
+
+// VolumeEstimateMB is the accounting size charged per instance data volume.
+// shortcut: Docker local volumes have no native size enforcement; we count
+// a flat 1 GB estimate per instance against the 20 GB quota (technical-design
+// §4 limitation). Real disk limits need per-instance disk images (P1).
+const VolumeEstimateMB = 1024
 
 // Host is the detected schedulable capacity envelope.
 type Host struct {
@@ -63,6 +70,8 @@ type Budget struct {
 	Instances     int     `json:"instances"`
 	MaxInstances  int     `json:"max_instances"`
 	QuotaMemoryMB int     `json:"quota_memory_mb"`
+	UsedVolumeMB  int     `json:"used_volume_mb"`
+	QuotaVolumeMB int     `json:"quota_volume_mb"`
 	Subnet        string  `json:"subnet"`
 }
 
@@ -82,6 +91,11 @@ func (b Budget) Admit(t Type, n int) error {
 		return &store.ConflictError{Message: fmt.Sprintf(
 			"quota exceeded: %d MB used + %d MB requested > quota %d MB",
 			b.UsedMemoryMB, t.MemoryMB*n, b.QuotaMemoryMB)}
+	}
+	if b.UsedVolumeMB+VolumeEstimateMB*n > b.QuotaVolumeMB {
+		return &store.ConflictError{Message: fmt.Sprintf(
+			"quota exceeded: %d MB of volumes used + %d MB requested > quota %d MB",
+			b.UsedVolumeMB, VolumeEstimateMB*n, b.QuotaVolumeMB)}
 	}
 	if t.MemoryMB*n > b.FreeMB() {
 		return &InsufficientCapacity{

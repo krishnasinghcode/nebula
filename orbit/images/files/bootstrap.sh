@@ -14,13 +14,15 @@ chmod 600 /home/orbit/.ssh/authorized_keys
 printf '%s\n' "${ORBIT_INSTANCE_META:-{}}" > /var/lib/orbit/metadata.json
 
 # User data: write once, run once as the orbit admin user.
+# /var/lib/orbit is the persistent data volume: user-data and the marker
+# survive restarts and unit recreation (6.1).
 if [ -n "${ORBIT_USER_DATA_B64:-}" ] && [ ! -f /var/lib/orbit/user-data-ran ]; then
   printf '%s' "$ORBIT_USER_DATA_B64" | base64 -d > /var/lib/orbit/user-data
   chmod +x /var/lib/orbit/user-data
-  if su orbit -c "/var/lib/orbit/user-data" > /var/log/orbit-bootstrap.log 2>&1; then
+  if su orbit -c "/var/lib/orbit/user-data" > /var/log/orbit/bootstrap.log 2>&1; then
     touch /var/lib/orbit/user-data-ran
   else
-    echo "user-data script failed; see /var/log/orbit-bootstrap.log" >&2
+    echo "user-data script failed; see /var/log/orbit/bootstrap.log" >&2
   fi
 fi
 

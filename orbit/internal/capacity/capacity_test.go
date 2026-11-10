@@ -58,6 +58,19 @@ func TestAdmitInstanceQuota(t *testing.T) {
 	}
 }
 
+func TestAdmitVolumeQuota(t *testing.T) {
+	b := Budget{
+		Host:         Host{TotalCPUs: 16, TotalMemoryMB: 65536, SchedulableCPU: 15, SchedulableMB: 49152},
+		UsedVolumeMB: Quotas.TotalVolumeMB - VolumeEstimateMB,
+		MaxInstances: 5, QuotaMemoryMB: 65536, QuotaVolumeMB: Quotas.TotalVolumeMB,
+	}
+	micro := Type{ID: "orbit.micro", VCPU: 1, MemoryMB: 1024}
+	var qe *store.ConflictError
+	if err := b.Admit(micro, 1); !errors.As(err, &qe) {
+		t.Fatalf("volume quota not enforced: %v", err)
+	}
+}
+
 func TestAdmitCPUOvercommitAllowed(t *testing.T) {
 	// CPU overcommit allowed up to TOTAL cpus (not schedulable) — quotas, not reservations.
 	b := Budget{
