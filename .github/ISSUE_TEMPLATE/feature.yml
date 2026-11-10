@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a new feature or enhancement for Nebula or one of its services
+labels: ["feature"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What should be achieved, in one or two sentences?
+    validations:
+      required: true
+  - type: textarea
+    id: user-workflow
+    attributes:
+      label: User workflow
+      description: How will a user interact with this feature, step by step?
+    validations:
+      required: true
+  - type: textarea
+    id: functional-requirements
+    attributes:
+      label: Functional requirements
+      description: List the concrete behaviours required (use a numbered list).
+    validations:
+      required: true
+  - type: textarea
+    id: technical-considerations
+    attributes:
+      label: Technical considerations
+      description: Design notes, affected components, and documentation impact (see AGENTS.md documentation update matrix).
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: Checkable criteria that define "done".
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Related issues, sub-issues, or blocking work.
