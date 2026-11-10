@@ -6,6 +6,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // PortBinding publishes an instance port on the host.
@@ -50,9 +51,28 @@ func (s UnitSpec) validate() error {
 	if s.CPUs <= 0 {
 		return fmt.Errorf("unit spec requires a positive CPU limit")
 	}
+	return s.validateMounts()
+}
+
+// validateMounts enforces security.md §8 gate 2: no host-path mounts, no
+// docker socket, no sensitive host directories. Volumes are named volumes
+// only; the API cannot express privileged/pid/network-host modes at all
+// (rejected by construction — scenario 25).
+func (s UnitSpec) validateMounts() error {
+	banned := map[string]bool{
+		"/": true, "/etc": true, "/proc": true, "/sys": true,
+		"/var/run": true, "/var/run/docker.sock": true, "/run": true,
+	}
 	for _, v := range s.Volumes {
 		if v.Name == "" || v.Dest == "" {
 			return fmt.Errorf("volume mounts require name and destination")
+		}
+		if strings.HasPrefix(v.Name, "/") || strings.HasPrefix(v.Name, ".") {
+			return fmt.Errorf("volume %q: host-path mounts are not permitted (named volumes only)", v.Name)
+		}
+		if banned[v.Dest] || strings.Contains(v.Dest, "docker.sock") ||
+			strings.HasPrefix(v.Dest, "/proc") || strings.HasPrefix(v.Dest, "/sys") {
+			return fmt.Errorf("volume %q: mounting %q is not permitted", v.Name, v.Dest)
 		}
 	}
 	return nil

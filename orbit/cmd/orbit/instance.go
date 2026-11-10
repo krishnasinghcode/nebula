@@ -109,6 +109,9 @@ func newInstanceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := acknowledgeTrustModel(); err != nil {
+				return err
+			}
 			var in map[string]any
 			if err := c.do("POST", "/instances", body, &in); err != nil {
 				return err
