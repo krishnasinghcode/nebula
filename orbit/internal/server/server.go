@@ -9,10 +9,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 
 	"orbit/internal/runtime"
 )
+
+// nameRe is the instance-name rule from docs/features/orbit/design/data-and-api.md.
+var nameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{2,30}$`)
 
 // DataDir returns the orbit data directory (created if missing).
 func DataDir() (string, error) {
@@ -48,11 +52,15 @@ func LoadToken() (string, error) {
 	return token, nil
 }
 
-// New builds the control plane API server. rt is the execution-environment
-// adapter (nil = skip runtime health reporting). Loopback-only listener is
-// the caller's responsibility (see Serve).
-func New(token string, rt runtime.Adapter) http.Handler {
+// New builds the control plane HTTP server: auth + health (+ v1 API routes
+// when api is non-nil). rt is the execution-environment adapter (nil = skip
+// runtime health reporting). Loopback-only listener is the caller's
+// responsibility (see Serve).
+func New(token string, rt runtime.Adapter, api *API) http.Handler {
 	mux := http.NewServeMux()
+	if api != nil {
+		api.Register(mux)
+	}
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		status, detail := "ok", ""
 		if rt != nil {

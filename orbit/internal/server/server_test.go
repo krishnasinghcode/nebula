@@ -10,7 +10,7 @@ import (
 
 func TestHealthReportsRuntime(t *testing.T) {
 	// Healthy adapter -> ok
-	h := New("tok", runtime.NewFake())
+	h := New("tok", runtime.NewFake(), nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/health", nil)
 	req.Header.Set("Authorization", "Bearer tok")
@@ -20,7 +20,7 @@ func TestHealthReportsRuntime(t *testing.T) {
 	}
 
 	// Nil adapter -> ok without runtime check
-	h = New("tok", nil)
+	h = New("tok", nil, nil)
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest("GET", "/health", nil)
 	req.Header.Set("Authorization", "Bearer tok")
@@ -32,7 +32,7 @@ func TestHealthReportsRuntime(t *testing.T) {
 
 func TestAuthRequired(t *testing.T) {
 	f := runtime.NewFake()
-	h := New("secrettoken1234567890abcdef", f)
+	h := New("secrettoken1234567890abcdef", f, nil)
 
 	// No token -> 401
 	rec := httptest.NewRecorder()

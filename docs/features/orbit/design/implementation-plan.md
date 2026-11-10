@@ -48,7 +48,7 @@ Related: [requirements.md] · [feature-priorities.md] · [architecture.md] · [t
 |---|---|---|---|
 | 0 | Project scaffold | ☑ Done (2026-11-10) | Go 1.27, module `orbit`, deps: cobra 1.10 (chi/sqlite/docker deferred to first use), CI `.github/workflows/ci.yml`, `orbit version` + `orbit serve` (stub, bearer auth, loopback) |
 | 1 | Runtime adapter + skeleton | ☑ Code done; runtime tests pending first Docker-enabled run (local daemon was off) | Adapter interface `orbit/internal/runtime/runtime.go`, DockerAdapter + FakeAdapter, health reports runtime ping; CI runtime job added |
-| 2 | State store, state machine, reconciler | ☐ Not started | — |
+| 2 | State store, state machine, reconciler | ☑ Code done (see checkpoint) | SQLite store + events, state machine with transition rules, async provision, inline stop/start/reboot, async terminate, reconciler (crash/OOM/orphan/startup), v1 instance API + contract tests, openapi.yaml |
 | 3 | Images, SSH keys, SSH access | ☐ Not started | — |
 | 4 | Instance types, capacity, quotas | ☐ Not started | — |
 | 5 | Networking | ☐ Not started | — |
@@ -104,22 +104,22 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 
 **Goal:** honest, durable state. Everything else depends on never lying about state. Design: [architecture.md §4–5], [data-and-api.md §2–3], [technical-design.md §11].
 
-- [ ] 2.1 SQLite store (WAL) with migrations for entities: Instance, Image, InstanceType, SSHKey, Volume, Network, InstanceEvent ([data-and-api.md §1]).
-- [ ] 2.2 State machine package: legal transitions per [data-and-api.md §2]; serialized per-instance transitions; every transition appends an InstanceEvent transactionally.
-- [ ] 2.3 Instance manager service: create (validate → admit → persist `provisioning` → hand off), start/stop/reboot/terminate per flows in architecture.md §4.
-- [ ] 2.4 Reconciler loop: inspect non-terminal instances via adapter; map exited→`stopped`/`failed`(+reason, OOMKilled), missing→`failed/orphaned`; startup reconciliation before serving; partial-provisioning rollback (delete half-created container/volume).
-- [ ] 2.5 REST API v1 for instances (POST /instances 202, GET list/describe, lifecycle actions, ports, logs) per [data-and-api.md §3]; validation rules; structured errors; idempotency via name + idempotency token.
-- [ ] 2.6 Bearer-token auth middleware (token generated at first run, stored 0600, loopback-only listener) — security gate from now on.
-- [ ] 2.7 OpenAPI file `orbit/api/openapi.yaml` for the implemented endpoints.
+- [x] 2.1 SQLite store (WAL) with migrations for entities: Instance, Image, InstanceType, SSHKey, Volume, Network, InstanceEvent ([data-and-api.md §1]). *(Instances + events only so far; keys/volumes/networks land in Phases 3, 5, 6 when first written — see §4.)*
+- [x] 2.2 State machine package: legal transitions per [data-and-api.md §2]; serialized per-instance transitions; every transition appends an InstanceEvent transactionally. *(Failures also set `transition_error` = event message.)*
+- [x] 2.3 Instance manager service: create (validate → admit → persist `provisioning` → hand off), start/stop/reboot/terminate per flows in architecture.md §4. *(Admit = capacity check deferred to Phase 4.)*
+- [x] 2.4 Reconciler loop: inspect non-terminal instances via adapter; map exited→`stopped`/`failed`(+reason, OOMKilled), missing→`failed/orphaned`; startup reconciliation before serving; partial-provisioning rollback (delete half-created container/volume).
+- [x] 2.5 REST API v1 for instances (POST /instances 202, GET list/describe, lifecycle actions, ports, logs) per [data-and-api.md §3]; validation rules; structured errors; idempotency via name + idempotency token. *(Ports PUT + logs endpoints deferred — port runtime lands Phase 5, adapter Logs Phase 3; see §4. Idempotency via unique name; token field accepted, name is the anchor — see §4.)*
+- [x] 2.6 Bearer-token auth middleware (token generated at first run, stored 0600, loopback-only listener) — security gate from now on. *(Done in Phase 0.)*
+- [x] 2.7 OpenAPI file `orbit/api/openapi.yaml` for the implemented endpoints.
 
 **Tests:**
 - Unit: every legal and illegal state transition; validation table from data-and-api.md §3.3 (each row a case); idempotency (duplicate name, duplicate token).
 - Integration (FakeAdapter): full create flow 202→`running`; reconcile scenarios — exited, OOM, orphaned, host-reboot (restart store+manager, assert `stopped`/`failed` ≤ 60 s), partial-create rollback; concurrent ops → single 409; events appended for every transition.
 - API: contract tests per endpoint incl. error shapes (validation_failed/unauthorized/conflict/quota codes); auth tests (no token 401, loopback binding asserted).
 
-**Verification:** unit + integration green; `orbit serve` survives kill -9 and reconciles on restart (manual smoke recorded in checkpoint).
+**Verification:** unit + integration green; `orbit serve` survives kill -9 and reconciles on restart (manual smoke recorded in checkpoint). *(Unit + integration green locally 2026-11-10: manager (9 tests incl. host-reboot reconcile), server contract tests, runtime fakes. Manual kill-9 smoke pending — needs Docker running locally.)*
 
-**Checkpoint:** *Migration tool used: ___. Store file location: ___. Known deviations from data-and-api.md: ___.*
+**Checkpoint:** *Migration tool used: inline migrations const (v1) in `orbit/internal/store/store.go` — no migration framework (shortcut: fine until schema drift becomes real; add versioned migrations if schema changes post-release). Store file: `<data-dir>/orbit.db` (default `~/.orbit/orbit.db`), WAL. Known deviations from data-and-api.md: ports PUT + logs endpoints deferred (Phases 5/3); idempotency anchored on unique name (token accepted but not compared); capacity admission pending Phase 4; image/type/key catalogue validation pending Phases 3–4. Package layout: `orbit/internal/{store,manager,runtime,server}`, types in store.*
 
 ---
 
@@ -271,6 +271,9 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 | 2026-11-10 | 0.1 | Module path `orbit` (not a full domain path) | No GitHub remote exists yet; rename before first release | session-approved |
 | 2026-11-10 | 0.2 | CI runtime-test job added in Phase 1 (was deferred from Phase 0) | Runtime suite didn't exist yet in Phase 0 | session-approved |
 | 2026-11-10 | env | Tests on this machine need `GOTMPDIR=C:\Users\krish\AppData\Local\Temp\opencode` | Windows Application Control blocks test binaries under default Temp | n/a (environment) |
+| 2026-11-10 | 2.1 | Store migrations cover instances + events only; keys/volumes/networks tables added in Phases 3/5/6 | Entities materialise with their first writer; avoids speculative schemas | session-approved |
+| 2026-11-10 | 2.5 | Ports PUT + logs endpoints deferred; idempotency anchored on unique name (token accepted, not compared) | Port publishing needs runtime support (Phase 5), logs need adapter Logs (Phase 3); name uniqueness already gives replay semantics | session-approved |
+| 2026-11-10 | 2.x | Package layout: `internal/{store,manager,runtime,server}`; instance types live in store package | Avoided store↔instance import cycle discovered during build | session-approved |
 | 2026-11-10 | 1.1–1.2 | Adapter interface ships Ping/Create/Start/Stop/Remove/Inspect only; Stats/Logs deferred (Phase 2 logs, P1 stats); network/volume params land Phases 5–6; `Cmd` added to UnitSpec (needed for OOM test + Phase 3 bootstrap) | YAGNI: implement when first consumer exists; interface shape per architecture.md §7 unchanged | session-approved |
 
 ## 5. Open Questions Carried Into Implementation
