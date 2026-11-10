@@ -114,7 +114,7 @@ func (s *Store) Transition(id, to, eventType, message string) (*Instance, error)
 		return nil, err
 	}
 	if !CanTransition(cur, to) {
-		return nil, &ConflictError{InstanceID: id, From: cur, To: to}
+		return nil, &ConflictError{Message: fmt.Sprintf("instance %s: transition %s→%s not permitted", id, cur, to)}
 	}
 	if _, err := tx.Exec(`UPDATE instances SET state=?, updated_at=? WHERE id=?`, to, now, id); err != nil {
 		return nil, err
@@ -134,6 +134,17 @@ func (s *Store) Transition(id, to, eventType, message string) (*Instance, error)
 		return nil, err
 	}
 	return s.GetInstance(id)
+}
+
+// SetInstancePorts updates the resolved port mappings.
+func (s *Store) SetInstancePorts(id string, ports []Port) error {
+	b, err := json.Marshal(ports)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`UPDATE instances SET ports=?, updated_at=? WHERE id=?`,
+		string(b), time.Now().UTC().Format(time.RFC3339), id)
+	return err
 }
 
 // SetInstanceFields updates mutable metadata (private_ip, transition_error).
@@ -174,9 +185,7 @@ func (s *Store) Events(instanceID string) ([]Event, error) {
 	return out, rows.Err()
 }
 
-// ConflictError signals an illegal state transition or duplicate resource.
-type ConflictError struct{ InstanceID, From, To string }
+// ConflictError signals an illegal state transition or duplicate/in-use resource.
+type ConflictError struct{ Message string }
 
-func (e *ConflictError) Error() string {
-	return fmt.Sprintf("instance %s: transition %s→%s not permitted", e.InstanceID, e.From, e.To)
-}
+func (e *ConflictError) Error() string { return e.Message }

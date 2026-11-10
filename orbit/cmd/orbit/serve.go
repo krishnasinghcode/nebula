@@ -48,7 +48,7 @@ func newServeCmd() *cobra.Command {
 			defer cancel()
 			mgr.StartReconciler(ctx, 5*time.Second)
 
-			api := &server.API{Manager: mgr}
+			api := &server.API{Manager: mgr, Keys: st}
 			fmt.Printf("orbit control plane listening on http://127.0.0.1:%d (data: %s)\n", port, dir)
 			return server.Serve(port, server.New(token, rt, api))
 		},

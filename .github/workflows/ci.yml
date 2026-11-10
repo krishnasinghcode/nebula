@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
 
-jobs:
+	jobs:
   build-test:
     runs-on: ubuntu-latest
     defaults:
@@ -33,3 +33,10 @@ jobs:
         with:
           go-version-file: orbit/go.mod
       - run: go test ./... -tags=runtime -v
+
+  image-build:
+    # Verify curated images still build (Phase 3).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh scripts/build-images.sh

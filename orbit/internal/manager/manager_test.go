@@ -17,6 +17,13 @@ func testManager(t *testing.T) (*Manager, *runtime.FakeAdapter, *store.Store) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
+	// Seed the key the sample instances reference.
+	if err := st.CreateSSHKey(&store.SSHKey{
+		Name: "dev", PublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB9mXhE0+7T0mKc1V0T7XyO9mE0samplekeyfortests dev",
+		Fingerprint: "SHA256:test",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	f := runtime.NewFake()
 	return New(st, f), f, st
 }

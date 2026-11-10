@@ -4,12 +4,15 @@ package manager
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 
+	"orbit/internal/catalogue"
 	"orbit/internal/runtime"
 	"orbit/internal/store"
 )
@@ -79,7 +82,7 @@ func (m *Manager) provision(ctx context.Context, id string) {
 	if err != nil || in == nil {
 		return
 	}
-	spec, err := m.unitSpec(in)
+	spec, err := m.unitSpec(ctx, in)
 	if err != nil {
 		m.fail(id, "build unit spec: "+err.Error())
 		return
@@ -94,17 +97,69 @@ func (m *Manager) provision(ctx context.Context, id string) {
 		m.fail(id, "runtime start: "+err.Error())
 		return
 	}
+	// Resolve auto-allocated host ports (SSH at minimum) into the record.
+	if bindings, err := m.rt.PortBindings(ctx, unitID); err == nil {
+		for i := range in.Ports {
+			if host, ok := bindings[in.Ports[i].InstancePort]; ok {
+				in.Ports[i].HostPort = host
+			}
+		}
+		if err := m.st.SetInstancePorts(in.ID, in.Ports); err != nil {
+			log.Printf("orbit: provision(%s): save ports: %v", id, err)
+		}
+	}
 	if _, err := m.st.Transition(id, store.StateRunning, store.EventTransition,
 		"provisioned as unit "+unitID); err != nil {
 		m.fail(id, "state transition: "+err.Error())
 	}
 }
 
-func (m *Manager) unitSpec(in *store.Instance) (runtime.UnitSpec, error) {
+func (m *Manager) unitSpec(ctx context.Context, in *store.Instance) (runtime.UnitSpec, error) {
+	dockerImage, err := catalogue.MustDockerImage(in.ImageID)
+	if err != nil {
+		return runtime.UnitSpec{}, err
+	}
+	key, err := m.st.GetSSHKey(in.KeyID)
+	if err != nil {
+		return runtime.UnitSpec{}, err
+	}
+	if key == nil {
+		return runtime.UnitSpec{}, fmt.Errorf("ssh key %q not found", in.KeyID)
+	}
+
+	meta, _ := json.Marshal(map[string]string{
+		"instance_id": in.ID, "name": in.Name, "type": in.TypeID,
+	})
+	env := []string{
+		"ORBIT_INSTANCE_META=" + string(meta),
+		"ORBIT_PUBKEY=" + key.PublicKey,
+	}
+	if in.UserData != "" {
+		env = append(env, "ORBIT_USER_DATA_B64="+base64.StdEncoding.EncodeToString([]byte(in.UserData)))
+	}
+
+	// SSH (22) is auto-published to loopback so `orbit ssh` works on every
+	// platform, incl. Docker Desktop where private IPs are unreachable.
+	ports := in.Ports
+	hasSSH := false
+	for _, p := range ports {
+		if p.InstancePort == 22 {
+			hasSSH = true
+		}
+	}
+	if !hasSSH {
+		ports = append(ports, store.Port{InstancePort: 22, HostPort: 0, Bind: "loopback"})
+	}
+	if err := m.st.SetInstancePorts(in.ID, ports); err != nil {
+		return runtime.UnitSpec{}, err
+	}
+
 	return runtime.UnitSpec{
 		Name:      in.ID,
-		Image:     in.ImageID, // Phase 3: map Orbit image id → Docker image
+		Image:     dockerImage,
 		Labels:    map[string]string{"orbit.instance-id": in.ID, "orbit.name": in.Name},
+		Env:       env,
+		Ports:     []runtime.PortBinding{{InstancePort: 22, HostPort: 0, Bind: "loopback"}},
 		CPUs:      1,    // Phase 4: from instance type catalogue
 		MemoryMB:  1024, // Phase 4: from instance type catalogue
 		PidsLimit: 512,

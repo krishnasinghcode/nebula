@@ -15,6 +15,7 @@ type FakeAdapter struct {
 	CreateErr error // returned by every Create
 	StartErr  error // returned by every Start
 	OpsErr    error // returned by Stop/Remove/Inspect
+	nextPort  int   // deterministic auto port allocation
 }
 
 type fakeUnit struct {
@@ -24,6 +25,7 @@ type fakeUnit struct {
 	removed  bool
 	exitCode int
 	oom      bool
+	ports    map[int]int
 }
 
 func NewFake() *FakeAdapter {
@@ -44,7 +46,7 @@ func (f *FakeAdapter) Create(_ context.Context, spec UnitSpec) (string, error) {
 	if _, ok := f.units[spec.Name]; ok {
 		return "", fmt.Errorf("unit %q already exists", spec.Name)
 	}
-	f.units[spec.Name] = &fakeUnit{spec: spec, running: false}
+	f.units[spec.Name] = &fakeUnit{spec: spec, running: false, ports: map[int]int{}}
 	return spec.Name, nil
 }
 
@@ -59,6 +61,15 @@ func (f *FakeAdapter) Start(_ context.Context, id string) error {
 		return fmt.Errorf("unit %q: %w", id, ErrMissing)
 	}
 	u.running, u.exited = true, false
+	// Resolve auto host ports deterministically (fake: 31001, 31002, ...).
+	for _, p := range u.spec.Ports {
+		if p.HostPort == 0 {
+			f.nextPort++
+			u.ports[p.InstancePort] = 31000 + f.nextPort
+		} else {
+			u.ports[p.InstancePort] = p.HostPort
+		}
+	}
 	return nil
 }
 
@@ -109,6 +120,21 @@ func (f *FakeAdapter) Inspect(_ context.Context, id string) (Status, error) {
 	default:
 		return Status{State: "exited", ExitCode: u.exitCode}, nil
 	}
+}
+
+// PortBindings reports resolved host ports for published instance ports.
+func (f *FakeAdapter) PortBindings(_ context.Context, id string) (map[int]int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	u, ok := f.units[id]
+	if !ok {
+		return nil, fmt.Errorf("unit %q: %w", id, ErrMissing)
+	}
+	out := map[int]int{}
+	for k, v := range u.ports {
+		out[k] = v
+	}
+	return out, nil
 }
 
 // Scripted helpers for tests.

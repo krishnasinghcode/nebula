@@ -8,6 +8,13 @@ import (
 	"fmt"
 )
 
+// PortBinding publishes an instance port on the host.
+type PortBinding struct {
+	InstancePort int
+	HostPort     int    // 0 = auto-allocate
+	Bind         string // "loopback" (default) or "all"
+}
+
 // UnitSpec describes a compute unit to create, in Orbit terms.
 // It intentionally has no privileged/host-namespace knobs: the adapter type
 // system makes those unrepresentable, and the Docker implementation enforces
@@ -22,6 +29,7 @@ type UnitSpec struct {
 	MemoryMB       int
 	PidsLimit      int64
 	ReadOnlyRootFS bool
+	Ports          []PortBinding
 }
 
 func (s UnitSpec) validate() error {
@@ -53,4 +61,7 @@ type Adapter interface {
 	Stop(ctx context.Context, id string, timeoutSecs int) error
 	Remove(ctx context.Context, id string) error
 	Inspect(ctx context.Context, id string) (Status, error)
+	// PortBindings reports resolved host ports for the unit's published
+	// instance ports (host port 0 = auto-allocated by the runtime).
+	PortBindings(ctx context.Context, id string) (map[int]int, error)
 }

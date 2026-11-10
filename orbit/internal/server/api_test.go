@@ -2,15 +2,20 @@ package server
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"orbit/internal/manager"
 	"orbit/internal/runtime"
 	"orbit/internal/store"
+
+	"golang.org/x/crypto/ssh"
 )
 
 func testAPI(t *testing.T) http.Handler {
@@ -20,7 +25,13 @@ func testAPI(t *testing.T) http.Handler {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	api := &API{Manager: manager.New(st, runtime.NewFake())}
+	if err := st.CreateSSHKey(&store.SSHKey{
+		Name: "dev", PublicKey: "placeholder",
+		Fingerprint: "SHA256:test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	api := &API{Manager: manager.New(st, runtime.NewFake()), Keys: st}
 	return New("tok", runtime.NewFake(), api)
 }
 
@@ -132,6 +143,59 @@ func TestActionConflictAndNotFound(t *testing.T) {
 		t.Errorf("double stop: %d, want 409", rec.Code)
 	}
 }
+
+func TestKeysLifecycle(t *testing.T) {
+	h := testAPI(t)
+
+	// Invalid key material -> 422
+	rec := do(t, h, "POST", "/v1/keys", map[string]any{"name": "dev", "public_key": "not a key"})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("invalid pubkey: %d, want 422", rec.Code)
+	}
+
+	pub := generateTestPubkey(t)
+	rec = do(t, h, "POST", "/v1/keys", map[string]any{"name": "dev", "public_key": pub})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create key: %d (%s), want 201", rec.Code, rec.Body.String())
+	}
+
+	// Duplicate -> 409
+	rec = do(t, h, "POST", "/v1/keys", map[string]any{"name": "dev", "public_key": pub})
+	if rec.Code != http.StatusConflict {
+		t.Errorf("duplicate key: %d, want 409", rec.Code)
+	}
+
+	// In-use deletion -> 409 (create an instance referencing it first)
+	rec = do(t, h, "POST", "/v1/instances", validCreate())
+	for i := 0; i < 100 && !bytes.Contains(rec.Body.Bytes(), []byte(`"state":"running"`)); i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	rec = do(t, h, "DELETE", "/v1/keys/dev", nil)
+	if rec.Code != http.StatusConflict {
+		t.Errorf("delete in-use key: %d, want 409", rec.Code)
+	}
+
+	// List
+	rec = do(t, h, "GET", "/v1/keys", nil)
+	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte(`"fingerprint"`)) {
+		t.Errorf("list keys: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func generateTestPubkey(t *testing.T) string {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sshPub, err := ssh.NewPublicKey(pubFrom(priv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(ssh.MarshalAuthorizedKey(sshPub))
+}
+
+func pubFrom(priv ed25519.PrivateKey) ed25519.PublicKey { return priv.Public().(ed25519.PublicKey) }
 
 func TestAPIRequiresAuth(t *testing.T) {
 	h := testAPI(t)

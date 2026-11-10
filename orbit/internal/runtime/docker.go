@@ -3,12 +3,21 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 )
+
+func itoa(n int) string {
+	if n == 0 {
+		return "" // empty = runtime auto-allocates
+	}
+	return strconv.Itoa(n)
+}
 
 // DockerAdapter implements Adapter against the Docker Engine API.
 // It enforces the Orbit hardening profile on every unit it creates
@@ -54,6 +63,19 @@ func (d *DockerAdapter) Create(ctx context.Context, spec UnitSpec) (string, erro
 	hc.Resources.MemorySwap = hc.Resources.Memory // no swap: limits are honest
 	hc.Resources.PidsLimit = &spec.PidsLimit
 	hc.ReadonlyRootfs = spec.ReadOnlyRootFS
+
+	if len(spec.Ports) > 0 {
+		hc.PortBindings = nat.PortMap{}
+		for _, p := range spec.Ports {
+			port := nat.Port(fmt.Sprintf("%d/tcp", p.InstancePort))
+			hostIP := "127.0.0.1" // loopback default; "all" publishes on every interface
+			if p.Bind == "all" {
+				hostIP = ""
+			}
+			hc.PortBindings[port] = append(hc.PortBindings[port],
+				nat.PortBinding{HostIP: hostIP, HostPort: itoa(p.HostPort)})
+		}
+	}
 
 	// Image may be absent locally; the caller's policy decides when to pull.
 	// Phase 1 keeps create pull-free; Phase 3 adds curated-image pulls.
@@ -111,4 +133,28 @@ func (d *DockerAdapter) Inspect(ctx context.Context, id string) (Status, error) 
 		s.Error = st.Error
 	}
 	return s, nil
+}
+
+// PortBindings resolves the host ports for published instance ports.
+func (d *DockerAdapter) PortBindings(ctx context.Context, id string) (map[int]int, error) {
+	info, err := d.cli.ContainerInspect(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := map[int]int{}
+	for port, bindings := range info.NetworkSettings.Ports {
+		if len(bindings) == 0 {
+			continue
+		}
+		var instancePort int
+		if _, err := fmt.Sscanf(string(port), "%d/tcp", &instancePort); err != nil {
+			continue
+		}
+		host, err := strconv.Atoi(bindings[0].HostPort)
+		if err != nil {
+			continue
+		}
+		out[instancePort] = host
+	}
+	return out, nil
 }

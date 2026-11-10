@@ -58,4 +58,11 @@ CREATE TABLE IF NOT EXISTS instance_events (
   occurred_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_instance ON instance_events(instance_id);
+
+CREATE TABLE IF NOT EXISTS ssh_keys (
+  name        TEXT PRIMARY KEY,
+  public_key  TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  created_at  TEXT NOT NULL
+);
 `

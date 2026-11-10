@@ -4,15 +4,23 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 
+	"orbit/internal/catalogue"
 	"orbit/internal/manager"
 	"orbit/internal/store"
+
+	"golang.org/x/crypto/ssh"
 )
+
+// keyRe: key names share the instance-name shape.
+var keyRe = regexp.MustCompile(`^[a-z][a-z0-9-]{2,30}$`)
 
 // API holds the control-plane dependencies for the v1 routes.
 type API struct {
 	Manager *manager.Manager
+	Keys    *store.Store
 }
 
 // Register mounts the v1 API routes on mux.
@@ -25,6 +33,95 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/instances/{id}/reboot", a.action("reboot"))
 	mux.HandleFunc("POST /v1/instances/{id}/terminate", a.action("terminate"))
 	mux.HandleFunc("GET /v1/instances/{id}/events", a.instanceEvents)
+
+	mux.HandleFunc("GET /v1/images", a.listImages)
+
+	mux.HandleFunc("POST /v1/keys", a.createKey)
+	mux.HandleFunc("GET /v1/keys", a.listKeys)
+	mux.HandleFunc("GET /v1/keys/{name}", a.getKey)
+	mux.HandleFunc("DELETE /v1/keys/{name}", a.deleteKey)
+}
+
+// listImages serves the read-only curated catalogue.
+func (a *API) listImages(w http.ResponseWriter, _ *http.Request) {
+	writeJSONBody(w, http.StatusOK, catalogue.Images)
+}
+
+type createKeyReq struct {
+	Name      string `json:"name"`
+	PublicKey string `json:"public_key"`
+}
+
+func (a *API) createKey(w http.ResponseWriter, r *http.Request) {
+	var req createKeyReq
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		errorJSON(w, http.StatusBadRequest, "validation_failed", "invalid JSON body: "+err.Error(), nil)
+		return
+	}
+	if !keyRe.MatchString(req.Name) {
+		errorJSON(w, http.StatusUnprocessableEntity, "validation_failed",
+			"name must match ^[a-z][a-z0-9-]{2,30}$", nil)
+		return
+	}
+	fp, err := fingerprint(req.PublicKey)
+	if err != nil {
+		errorJSON(w, http.StatusUnprocessableEntity, "validation_failed",
+			"public_key is not a valid OpenSSH public key: "+err.Error(), nil)
+		return
+	}
+	key := &store.SSHKey{Name: req.Name, PublicKey: req.PublicKey, Fingerprint: fp}
+	if err := a.Keys.CreateSSHKey(key); err != nil {
+		errorJSON(w, http.StatusConflict, "conflict", "key name already registered", nil)
+		return
+	}
+	writeJSONBody(w, http.StatusCreated, key)
+}
+
+func (a *API) listKeys(w http.ResponseWriter, _ *http.Request) {
+	keys, err := a.Keys.ListSSHKeys()
+	if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "internal_error", err.Error(), nil)
+		return
+	}
+	if keys == nil {
+		keys = []store.SSHKey{}
+	}
+	writeJSONBody(w, http.StatusOK, keys)
+}
+
+func (a *API) getKey(w http.ResponseWriter, r *http.Request) {
+	key, err := a.Keys.GetSSHKey(r.PathValue("name"))
+	if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "internal_error", err.Error(), nil)
+		return
+	}
+	if key == nil {
+		errorJSON(w, http.StatusNotFound, "not_found", "key not found", nil)
+		return
+	}
+	writeJSONBody(w, http.StatusOK, key)
+}
+
+func (a *API) deleteKey(w http.ResponseWriter, r *http.Request) {
+	err := a.Keys.DeleteSSHKey(r.PathValue("name"))
+	var ce *store.ConflictError
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+	case errors.As(err, &ce):
+		errorJSON(w, http.StatusConflict, "conflict", ce.Message, nil)
+	default:
+		errorJSON(w, http.StatusInternalServerError, "internal_error", err.Error(), nil)
+	}
+}
+
+// fingerprint computes the SHA256 fingerprint of an OpenSSH public key.
+func fingerprint(pubkey string) (string, error) {
+	parsed, _, _, _, err := ssh.ParseAuthorizedKey([]byte(pubkey))
+	if err != nil {
+		return "", err
+	}
+	return ssh.FingerprintSHA256(parsed), nil
 }
 
 type createInstanceReq struct {
