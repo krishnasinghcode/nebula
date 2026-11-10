@@ -27,22 +27,37 @@ Distributed infrastructure (Redis, Kafka, etc.) is intentionally excluded.
 
 ## Environment Configuration
 
-`<TBD>` — environment variables, configuration files, and secrets handling will be documented here as the configuration approach is implemented (Phase 0–2 of the [implementation plan](features/orbit/design/implementation-plan.md)).
+- Orbit control plane stores state and its API token under `~/.orbit/` (token file `0600`, generated at first `orbit serve`).
+- Tests on Windows may need `GOTMPDIR` set to a writable, policy-approved temp dir if the default is blocked.
+- `.gitignore` at repo root covers Go binaries, `node_modules/`, and the dashboard build output.
 
 ## Setup Instructions
 
-`<TBD>` — clone and bootstrap steps to be added after the stack is selected.
+```sh
+git clone <repo-url> && cd nebula
+cd orbit
+go build ./...
+```
 
 ## Build and Execution
 
-`<TBD>` — commands to build and run the platform locally will be added here.
+```sh
+# run control plane (localhost only, default port 7420)
+go run ./cmd/orbit serve
+# CLI
+go run ./cmd/orbit version
+```
 
 ## Testing
 
-`<TBD>` — commands to run unit and integration tests will be added here. In the meantime:
+```sh
+go test ./...            # unit + integration
+go test ./... -tags=runtime   # real-Docker suite (Phase 1+) — requires Docker running
+```
 
 - All new functionality must ship with appropriate tests (see `AGENTS.md`, section G).
 - Bug fixes must include regression tests.
+- Runtime-tagged tests require a running Docker Engine.
 
 ## Development Conventions
 

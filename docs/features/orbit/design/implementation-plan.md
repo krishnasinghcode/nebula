@@ -46,7 +46,7 @@ Related: [requirements.md] · [feature-priorities.md] · [architecture.md] · [t
 
 | Phase | Name | Status | Checkpoint |
 |---|---|---|---|
-| 0 | Project scaffold | ☐ Not started | — |
+| 0 | Project scaffold | ☑ Done (2026-11-10) | Go 1.27, module `orbit`, deps: cobra 1.10 (chi/sqlite/docker deferred to first use), CI `.github/workflows/ci.yml`, `orbit version` + `orbit serve` (stub, bearer auth, loopback) |
 | 1 | Runtime adapter + skeleton | ☐ Not started | — |
 | 2 | State store, state machine, reconciler | ☐ Not started | — |
 | 3 | Images, SSH keys, SSH access | ☐ Not started | — |
@@ -65,17 +65,17 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 
 **Goal:** empty-but-building project with toolchain, CI, and a skeleton `orbit` CLI. Stack per [ADR-0001](../../../decisions/0001-orbit-technology-stack.md) (Accepted).
 
-- [ ] 0.1 Create `orbit/` module; add Go toolchain config (go.mod), lint config, `.gitignore`. Core dependencies: `chi` (router), `cobra` (CLI), `modernc.org/sqlite` (pure-Go SQLite driver), `github.com/docker/docker` client (adapter work in Phase 1).
-- [ ] 0.2 CI pipeline: build + lint + unit tests on every PR; a Docker-enabled job for runtime tests (Phase 1+).
-- [ ] 0.3 Skeleton `orbit` CLI binary: `orbit version` prints version; `orbit serve` starts a stub HTTP server on `127.0.0.1` returning `401` without token.
-- [ ] 0.4 Create the Dockerfile-based definitions directory `orbit/images/` with a README explaining the curated-image build process (images themselves are Phase 3).
-- [ ] 0.5 `docs/development.md`: fill in real prerequisites, build/test commands (`<TBD>` placeholders replaced).
+- [x] 0.1 Create `orbit/` module; add Go toolchain config (go.mod), lint config, `.gitignore`. Core dependencies: `chi` (router), `cobra` (CLI), `modernc.org/sqlite` (pure-Go SQLite driver), `github.com/docker/docker` client (adapter work in Phase 1). *(Deviations: stdlib `net/http` mux used instead of chi until real routes exist (Phase 2); chi/sqlite/docker deps added on first use — see §4.)*
+- [x] 0.2 CI pipeline: build + lint + unit tests on every PR; a Docker-enabled job for runtime tests (Phase 1+). *(Runtime-test job added in Phase 1 when the suite exists.)*
+- [x] 0.3 Skeleton `orbit` CLI binary: `orbit version` prints version; `orbit serve` starts a stub HTTP server on `127.0.0.1` returning `401` without token. *(Token generated at first run, stored `0600` in `~/.orbit/token`.)*
+- [x] 0.4 Create the Dockerfile-based definitions directory `orbit/images/` with a README explaining the curated-image build process (images themselves are Phase 3).
+- [x] 0.5 `docs/development.md`: fill in real prerequisites, build/test commands (`<TBD>` placeholders replaced).
 
 **Tests:** unit test for CLI version; integration test for the stub server auth (401 without token, 404 with token on unknown route).
 
-**Verification:** `go build ./... && go test ./...` green locally and in CI.
+**Verification:** `go build ./... && go test ./...` green locally and in CI. *(Verified locally 2026-11-10: build, vet, gofmt clean; tests pass. Note for agents on this machine: Windows Application Control blocks test binaries under the default Temp — run tests with `GOTMPDIR=C:\Users\krish\AppData\Local\Temp\opencode`.)*
 
-**Checkpoint (fill in when done):** *Module created at `orbit/`, Go version used: ___, CI URL: ___, commands: ___.*
+**Checkpoint (fill in when done):** *Module created at `orbit/`, Go version used: 1.27.1, module path `orbit` (shortcut: unpublishable module path; rename before first release — see §4). CI URL: pending first push to GitHub. Commands: `go build ./... && go vet ./... && go test ./...` (run inside `orbit/`).*
 
 ---
 
@@ -267,7 +267,9 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 
 | Date | Phase/Task | Deviation or decision | Reason | Approved by |
 |---|---|---|---|---|
-| | | | | |
+| 2026-11-10 | 0.1 | Stdlib `net/http` mux instead of chi; chi/`modernc.org/sqlite`/docker-client deps deferred to first use (Phase 1–2) | YAGNI: stub server needs no router; deps add nothing until real routes/store exist. ADR-0001 choices unchanged | session-approved (ponytail working rules) |
+| 2026-11-10 | 0.1 | Module path `orbit` (not a full domain path) | No GitHub remote exists yet; rename before first release | session-approved |
+| 2026-11-10 | env | Tests on this machine need `GOTMPDIR=C:\Users\krish\AppData\Local\Temp\opencode` | Windows Application Control blocks test binaries under default Temp | n/a (environment) |
 
 ## 5. Open Questions Carried Into Implementation
 

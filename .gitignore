@@ -1,0 +1,5 @@
+node_modules/
+orbit/orbit
+orbit/orbit.exe
+orbit/dashboard/dist/
+*.test
