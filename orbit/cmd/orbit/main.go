@@ -12,7 +12,8 @@ var version = "dev"
 
 func main() {
 	root := &cobra.Command{Use: "orbit", Short: "Nebula Orbit — local cloud compute"}
-	root.AddCommand(newVersionCmd(), newServeCmd(), newKeyCmd(), newSSHCmd())
+	root.AddCommand(newVersionCmd(), newServeCmd(), newKeyCmd(), newSSHCmd(),
+		newInstanceCmd(), newImagesCmd(), newTypesCmd(), newCapacityCmd())
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}

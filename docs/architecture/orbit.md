@@ -1,8 +1,8 @@
 # Orbit — Architecture
 
-This document describes the internal architecture of the **Orbit** compute service. Orbit is **planned, not implemented**. Everything below reflects the currently proposed direction; undecided items are explicitly marked **TBD** and must not be filled in with invented details.
+This document describes the internal architecture of the **Orbit** compute service. Orbit's MVP is **implemented** behind the v1 API and `orbit` CLI (ADR-0001 stack: Go, Chi-compatible HTTP, Docker Engine, SQLite, Cobra, OpenAPI); items marked **TBD** remain undecided and must not be filled in with invented details.
 
-> **Status key:** **Proposed** (under consideration), **Accepted** (agreed), **Implemented** (exists in code). Orbit's overall concept is Proposed; its internal design is largely TBD.
+> **Status key:** **Proposed** (under consideration), **Accepted** (agreed), **Implemented** (exists in code). Orbit's MVP architecture is Implemented; P1/P2 items remain Proposed.
 
 For the platform-wide context, see [overview.md](overview.md). For the functional specification, see [instance-management.md](../features/orbit/instance-management.md).
 

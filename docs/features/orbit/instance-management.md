@@ -1,6 +1,6 @@
 # Feature Specification: Orbit Instance Management
 
-Service: **Orbit** · Status: **Planned — not implemented**
+Service: **Orbit** · Status: **In development — MVP implemented behind the API/CLI; release pending security gates (Phase 8)**
 
 This document specifies the Orbit Instance Management feature. Placeholders marked `<TBD>` indicate requirements or decisions that have not been established; they must not be filled in with invented details.
 
@@ -25,13 +25,13 @@ Enable users to create and manage compute instances (**Orbit Instances**) throug
 
 | # | Requirement | Status |
 |---|---|---|
-| FR-1 | Users can provision an Orbit Instance | Planned |
-| FR-2 | Users can view their instances and their current state | Planned |
-| FR-3 | Users can start and stop instances | Planned |
-| FR-4 | Users can terminate instances (terminal) | Planned |
-| FR-5 | Users can specify resource requirements (CPU, memory) at provisioning | Planned — details TBD |
-| FR-6 | Users can access running instances over SSH | Planned — design TBD |
-| FR-7 | Users can view instance status/monitoring information | Planned — scope TBD |
+| FR-1 | Users can provision an Orbit Instance | Implemented (API + CLI; async provisioning) |
+| FR-2 | Users can view their instances and their current state | Implemented (list + describe with events) |
+| FR-3 | Users can start and stop instances | Implemented |
+| FR-4 | Users can terminate instances (terminal) | Implemented (optional keep-root-volume) |
+| FR-5 | Users can specify resource requirements (CPU, memory) at provisioning | Implemented (instance-type catalogue; admission control + quotas) |
+| FR-6 | Users can access running instances over SSH | Implemented (real sshd in guest; key-only auth; `orbit ssh`) |
+| FR-7 | Users can view instance status/monitoring information | Implemented (state, events, capacity; logs/metrics deferred) |
 
 Additional requirements (authentication, authorisation, multi-user support): `<TBD>`.
 
@@ -80,6 +80,9 @@ Acceptance criteria will be defined per GitHub Issue when implementation begins.
 
 ## 10. Known Limitations
 
-- Nothing is implemented yet; this specification describes planned functionality only.
+- Local test execution on the primary development machine is blocked by Windows Device Guard; the test suites run in CI. See the implementation plan's deviations log.
+- Volume quotas are estimate-based (Docker local volumes have no native size enforcement).
+- Instance-to-instance traffic on the shared `orbit-net` bridge is unrestricted by design (single-user local trust model).
+- Rootfs is not read-only yet; hardening polish is tracked for Phase 8.
 - Docker-based emulation means instances are not true VMs (isolation and behaviour differences).
 - Single-host operation assumed initially; distributed execution is out of scope `<TBD>`.

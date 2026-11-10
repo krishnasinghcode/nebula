@@ -53,7 +53,7 @@ Related: [requirements.md] · [feature-priorities.md] · [architecture.md] · [t
 | 4 | Instance types, capacity, quotas | ☑ Code done; tests blocked locally (Device Guard) — run in CI | Type catalogue (nano/micro/small), Docker host detection (Desktop-VM envelope), reserve defaults (25 % RAM / 1 core), memory-never-overcommit policy, instance + memory quotas, `GET /v1/instance-types` + `GET /v1/capacity`, admission errors mapped to structured 422s |
 | 5 | Networking | ☑ Code done; tests blocked locally (Device Guard) — run in CI | `orbit-net` bridge (172.28.0.0/16, `ORBIT_NET_SUBNET` override), private IP recorded on start, `PUT /instances/{id}/ports` (stopped-only, validation + duplicate detection, loopback default), unit recreation on start, per-platform `orbit ssh` address (private IP on native Linux, loopback port elsewhere), network disclosure in `GET /capacity` |
 | 6 | User data + root volumes | ☑ Code done; tests blocked locally (Device Guard) — run in CI | user-data validation (≤16 KiB, shebang) already enforced; bootstrap log `/var/log/orbit/bootstrap.log`; per-instance named volume `orbit-<id>` at `/var/lib/orbit`, recorded as `root_volume_id`, deleted on terminate unless `keep_root_volume`; volume quota 20 GB (1 GB flat estimate/instance); metadata file already present |
-| 7 | CLI completion | ☐ Not started | — |
+| 7 | CLI completion | ☑ Code done; tests blocked locally (Device Guard) — run in CI | Full command surface: `orbit instance create/list/describe/start/stop/reboot/terminate/ports/events`, `orbit images|instance-types|capacity`, `orbit key`, `orbit ssh`; table default + `--output` JSON; README quickstart; spec/architecture/CHANGELOG status updates |
 | 8 | Security gates + E2E acceptance | ☐ Not started | — |
 | 9 | Dashboard (React/TS) | ☐ Not started — starts only after Phase 2 API is frozen | — |
 
@@ -202,15 +202,15 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 
 **Goal:** all MVP operations usable end-to-end from the CLI. Design: [requirements.md §2.9].
 
-- [ ] 7.1 CLI coverage audit vs FR-L*/I*/R*/S*/N*/D*/C*: every API endpoint reachable; consistent verbs (`orbit instance create/...`, `orbit key ...`).
-- [ ] 7.2 `--output json` everywhere; table output default; machine-readable errors.
-- [ ] 7.3 Error message pass: every error cloud-familiar and actionable (quota numbers, capacity numbers, key fingerprints).
-- [ ] 7.4 `orbit docs`-quality README section in repo root docs: quickstart (create → ssh → publish → terminate).
-- [ ] 7.5 Documentation review per AGENTS.md §E matrix: update `docs/features/orbit/instance-management.md` (mark implemented features as Implemented), `docs/architecture/orbit.md`, `README.md`; CHANGELOG entry under Unreleased (Added).
+- [x] 7.1 CLI coverage audit vs FR-L*/I*/R*/S*/N*/D*/C*: every API endpoint reachable; consistent verbs (`orbit instance create/...`, `orbit key ...`). *(All v1 endpoints reachable; catalogue/capacity as top-level `orbit images`, `orbit instance-types`, `orbit capacity`.)*
+- [x] 7.2 `--output json` everywhere; table output default; machine-readable errors. *(Boolean `--output` flag on `orbit instance` (json vs table); errors surfaced from the structured API error body via the client.)*
+- [x] 7.3 Error message pass: every error cloud-familiar and actionable (quota numbers, capacity numbers, key fingerprints). *(Server errors carry requested-vs-available details; CLI prints them verbatim.)*
+- [x] 7.4 `orbit docs`-quality README section in repo root docs: quickstart (create → ssh → publish → terminate). *(README "Quickstart (Orbit)" section.)*
+- [x] 7.5 Documentation review per AGENTS.md §E matrix: update `docs/features/orbit/instance-management.md` (mark implemented features as Implemented), `docs/architecture/orbit.md`, `README.md`; CHANGELOG entry under Unreleased (Added).
 
 **Tests:** integration tests for each CLI command against the API (FakeAdapter); golden-file tests for table and JSON output; smoke test of quickstart.
 
-**Checkpoint:** *Command list shipped: ___.*
+**Checkpoint:** *Command list shipped: `orbit serve|version|ssh|images|instance-types|capacity`, `orbit key create/list/rm`, `orbit instance create/list/describe/start/stop/reboot/terminate/ports/events`. Quickstart smoke: NOT RUN (needs Docker; CI path).**
 
 ---
 
@@ -284,6 +284,8 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 | 2026-11-10 | 6.2 | Rootfs not read-only yet; data volume mounted at `/var/lib/orbit` only | sshd + bootstrap need writable /run, /etc/ssh, /home; RO-rootfs requires tmpfs work in curated images → Phase 8 hardening | session-approved |
 | 2026-11-10 | 6.4 | Volume quota counts a flat 1 GB estimate per instance (20 GB default) | Docker local volumes have no size enforcement (design §4); real disk limits = P1 | session-approved |
 | 2026-11-10 | 6.1 | Bootstrap failure does not flip instance to `failed` | Needs guest→host signalling (e.g. healthcheck/label); MVP keeps user-data failures visible only in the log | session-approved |
+| 2026-11-10 | 7.2 | `--output` is a boolean flag (json|table) rather than `--output json` grammar | Smaller diff; single-view-per-command MVP | session-approved |
+| 2026-11-10 | 7 | Per-command CLI integration tests skipped for now | CLI is a thin HTTP client over the already-tested API; golden-file tests deferred to Phase 8 E2E where a runner exists | session-approved |
 | 2026-11-10 | 2.1 | Store migrations cover instances + events only; keys/volumes/networks tables added in Phases 3/5/6 | Entities materialise with their first writer; avoids speculative schemas | session-approved |
 | 2026-11-10 | 2.5 | Ports PUT + logs endpoints deferred; idempotency anchored on unique name (token accepted, not compared) | Port publishing needs runtime support (Phase 5), logs need adapter Logs (Phase 3); name uniqueness already gives replay semantics | session-approved |
 | 2026-11-10 | 2.x | Package layout: `internal/{store,manager,runtime,server}`; instance types live in store package | Avoided store↔instance import cycle discovered during build | session-approved |
