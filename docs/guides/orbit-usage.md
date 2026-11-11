@@ -2,6 +2,15 @@
 
 End-to-end guide: start Orbit, create and access an instance, manage it, and clean up. Everything runs on your machine with Docker.
 
+**Prerequisites:**
+
+1. [Docker](https://docs.docker.com/get-docker/) running
+2. An SSH key pair on your machine (used to log in to instances):
+   ```sh
+   ssh-keygen -t ed25519      # accept the defaults; no passphrase needed for local use
+   ```
+   Orbit only ever asks for the **public** part (`~/.ssh/id_ed25519.pub` — safe to paste anywhere). The private file (`~/.ssh/id_ed25519`, no extension) never leaves your machine and is what proves your identity — like a password file you must never share.
+
 **What you'll use:**
 
 | Piece | What it is | Where it runs |
@@ -67,11 +76,9 @@ Everything below can be done from the dashboard UI or the CLI — both talk to t
 
 ## 4. Register an SSH key
 
-This is how you log in to instances. Orbit only stores your **public** key.
+This is how you log in to instances. Register the **public** key from the prerequisite step.
 
-Dashboard: bottom panel "SSH keys" → name it `dev`, paste the contents of your public key (`~/.ssh/id_ed25519.pub` or `~/.ssh/id_rsa.pub`) → **Add key**.
-
-No key yet? Generate one: `ssh-keygen -t ed25519`.
+Dashboard: bottom panel "SSH keys" → name it `dev`, paste the contents of `~/.ssh/id_ed25519.pub` → **Add key**.
 
 CLI equivalent:
 
