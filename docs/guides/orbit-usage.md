@@ -108,19 +108,25 @@ Optional flags:
 
 ## 6. Access and use the instance
 
-**SSH in:**
+**SSH in** — pick the path matching how your key was registered:
+
+**A. Key imported via the dashboard** (you have the private key on this machine):
+
+```sh
+# <port> is the 22→<port> shown in `orbit instance list` / the dashboard
+ssh -i ~/.ssh/id_ed25519 -p <port> orbit@127.0.0.1
+```
+
+**B. Key created with `orbit key create`** (the CLI generated and stored the private key next to the control plane):
 
 ```sh
 orbit ssh web-1
+# container backend: docker exec -it orbit /bin/orbit ssh web-1
 ```
 
-No key juggling — Orbit finds the key and the auto-published SSH port for you. Inside, it's a real Ubuntu machine: try `cat /var/lib/orbit/metadata.json`, install packages, run a server.
+> `orbit ssh` requires the private key at `<data-dir>/keys/<key-name>` — only `orbit key create` puts one there. This is deliberate: dashboard-imported keys never expose the private half to the server, so use route A for those.
 
-**Or connect straight from your own terminal**, like any server. The instance's SSH port is the `22→<port>` shown in `orbit instance list` / the dashboard:
-
-```sh
-ssh -i ~/.ssh/id_ed25519 -p <port> orbit@127.0.0.1
-```
+Inside, it's a real Ubuntu machine: try `cat /var/lib/orbit/metadata.json`, install packages, run a server.
 
 **From your browser/terminal on the host:** anything you published with `--port` is on `http://127.0.0.1:<host-port>` once the service inside is running.
 
