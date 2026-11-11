@@ -116,6 +116,12 @@ orbit ssh web-1
 
 No key juggling — Orbit finds the key and the auto-published SSH port for you. Inside, it's a real Ubuntu machine: try `cat /var/lib/orbit/metadata.json`, install packages, run a server.
 
+**Or connect straight from your own terminal**, like any server. The instance's SSH port is the `22→<port>` shown in `orbit instance list` / the dashboard:
+
+```sh
+ssh -i ~/.ssh/id_ed25519 -p <port> orbit@127.0.0.1
+```
+
 **From your browser/terminal on the host:** anything you published with `--port` is on `http://127.0.0.1:<host-port>` once the service inside is running.
 
 Dashboard: click the instance row → detail view shows the SSH command, private IP, published ports, and lifecycle buttons.

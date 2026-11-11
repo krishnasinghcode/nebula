@@ -306,6 +306,7 @@ Status values: `Not started` / `In progress` / `Done (YYYY-MM-DD)`.
 1. Dashboard timing (P1 vs P2) — does not block MVP.
 2. Exact host-reserve percentages — finalise after Phase 4 measurements on Docker Desktop.
 3. User-data re-run semantics edge cases discovered in Phase 6 — document what ships.
+4. Embedded browser terminal for instances (xterm.js + server-side WebSocket→SSH proxy) — requested post-MVP; real work (raw TCP is unreachable from browsers, so the control plane must proxy SSH), deferred past v0.1.0.
 
 ---
 
