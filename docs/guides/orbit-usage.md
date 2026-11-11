@@ -36,10 +36,10 @@ Leave this terminal open. The API listens on loopback only — nothing is expose
 > docker run -d --name orbit -p 127.0.0.1:7420:7420 -e ORBIT_ADDR=0.0.0.0:7420 \
 >   -v "$PWD:/src" -v /var/run/docker.sock:/var/run/docker.sock \
 >   -v orbit-data:/root/.orbit \
->   -w /src -e GOCACHE=/tmp/gocache -e DOCKER_HOST=unix:///var/run/docker.sock \
+>   -w /src/orbit -e GOCACHE=/tmp/gocache -e DOCKER_HOST=unix:///var/run/docker.sock \
 >   golang:1.27 sh -c "go build -o /bin/orbit ./cmd/orbit && /bin/orbit serve"
 > ```
-> All `orbit` commands below then run as `docker exec orbit /bin/orbit ...`.
+> (Run from the repo root.) All `orbit` commands below then run as `docker exec orbit /bin/orbit ...`.
 
 ## 2. Get your API token
 
