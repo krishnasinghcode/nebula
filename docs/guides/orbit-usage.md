@@ -30,10 +30,12 @@ orbit control plane listening on http://127.0.0.1:7420 (data: ~/.orbit)
 
 Leave this terminal open. The API listens on loopback only — nothing is exposed to your network.
 
-> **Can't run the binary locally?** (e.g. Windows execution policy) run the control plane in a container instead:
+> **Can't run the binary locally?** (e.g. Windows execution policy) run the control plane in a container instead. The `docker rm -f` line makes this command **idempotent** — run it again any time and it replaces the old container; the `orbit-data` volume keeps your keys and token across recreations:
 > ```sh
+> docker rm -f orbit 2>/dev/null
 > docker run -d --name orbit -p 127.0.0.1:7420:7420 -e ORBIT_ADDR=0.0.0.0:7420 \
 >   -v "$PWD:/src" -v /var/run/docker.sock:/var/run/docker.sock \
+>   -v orbit-data:/root/.orbit \
 >   -w /src -e GOCACHE=/tmp/gocache -e DOCKER_HOST=unix:///var/run/docker.sock \
 >   golang:1.27 sh -c "go build -o /bin/orbit ./cmd/orbit && /bin/orbit serve"
 > ```

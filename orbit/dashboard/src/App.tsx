@@ -38,7 +38,7 @@ function TokenGate({ children }: { children: React.ReactNode }) {
 }
 
 function Dashboard() {
-  const { data: instances, refresh: refreshInstances } = useInstances();
+  const { data: instances, error: instancesError, refresh: refreshInstances } = useInstances();
   const { data: capacity } = useCapacity();
   const { data: images } = usePoll(api.listImages, 60000);
   const { data: types } = usePoll(api.listTypes, 60000);
@@ -48,19 +48,42 @@ function Dashboard() {
   const list = instances ?? [];
   const current = selected ? list.find((i) => i.id === selected) : undefined;
 
+  function changeToken() {
+    // Re-run the connect gate: clears the stored token (backend switch/re-auth).
+    localStorage.removeItem("orbit-token");
+    location.reload();
+  }
+
   return (
     <main className="mx-auto max-w-5xl p-6 space-y-6">
       <header className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">
           Nebula <span className="text-blue-400">Orbit</span>
         </h1>
-        {capacity && (
-          <span className="text-xs text-zinc-500" data-testid="capacity-summary">
-            {capacity.used_cpus}/{capacity.host!.schedulable_cpus} vCPU · {capacity.used_memory_mb}/
-            {capacity.host!.schedulable_memory_mb} MB · {capacity.instances}/{capacity.max_instances} instances
-          </span>
-        )}
+        <div className="flex items-center gap-4">
+          {capacity && (
+            <span className="text-xs text-zinc-500" data-testid="capacity-summary">
+              {capacity.used_cpus}/{capacity.host!.schedulable_cpus} vCPU · {capacity.used_memory_mb}/
+              {capacity.host!.schedulable_memory_mb} MB · {capacity.instances}/{capacity.max_instances} instances
+            </span>
+          )}
+          <button
+            className="text-xs text-zinc-500 hover:text-zinc-300 underline"
+            onClick={changeToken}
+            data-testid="change-token"
+            title="Clear the stored API token and reconnect (e.g. after switching backends)"
+          >
+            Change token
+          </button>
+        </div>
       </header>
+
+      {instancesError?.message.includes("401") && (
+        <p className="rounded border border-red-800 bg-red-950 p-3 text-sm text-red-300" data-testid="auth-error">
+          The API rejected your token (backend may have been recreated). Use{" "}
+          <button className="underline" onClick={changeToken}>Change token</button> and paste the new one.
+        </p>
+      )}
 
       {current ? (
         <InstanceDetail instance={current} onBack={() => setSelected(null)} />
