@@ -43,7 +43,7 @@ export function CreateWizard({
         image_id: imageId,
         type_id: typeId,
         key_id: effectiveKey,
-        ...(userData.trim() ? { user_data: btoa(userData) } : {}),
+        ...(userData.trim() ? { user_data: userData } : {}),
       });
       setName("");
       setUserData("");
