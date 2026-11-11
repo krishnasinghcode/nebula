@@ -22,7 +22,9 @@ Nebula is developed incrementally. Rather than replicating all AWS functionality
 
 ## Quickstart (Orbit)
 
-Prerequisites: Docker running, Go 1.2x. Build: `cd orbit && go build ./cmd/orbit`.
+**Full end-to-end walkthrough — backend, dashboard, token, create, SSH access, terminate:** [docs/guides/orbit-usage.md](docs/guides/orbit-usage.md)
+
+Quick version — prerequisites: Docker running, Go 1.2x. Build: `cd orbit && go build ./cmd/orbit`.
 
 ```sh
 ./orbit serve                          # starts the control plane (API on 127.0.0.1:7420)
@@ -60,7 +62,7 @@ System-level architecture, component boundaries, and design direction are docume
 
 ## Setup and Usage
 
-Setup instructions, prerequisites, and development commands are maintained in [docs/development.md](docs/development.md). These will be filled in as the technology stack is selected.
+Setup instructions, prerequisites, and development commands are maintained in [docs/development.md](docs/development.md). Per-service usage guides live in [docs/guides/](docs/guides/) — currently: [Orbit usage guide](docs/guides/orbit-usage.md).
 
 ## Contributing
 
