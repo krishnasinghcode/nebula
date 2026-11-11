@@ -69,6 +69,12 @@ func TestRuntimeHardeningProfile(t *testing.T) {
 	if !contains(hc.SecurityOpt, "no-new-privileges") {
 		t.Errorf("SecurityOpt = %v, want no-new-privileges", hc.SecurityOpt)
 	}
+	// Regression: AUDIT_WRITE is required for sshd PTY (interactive shell)
+	// sessions; without it the session aborts after auth. Docker normalises
+	// cap names with a CAP_ prefix.
+	if !contains(hc.CapAdd, "CAP_AUDIT_WRITE") {
+		t.Errorf("CapAdd = %v, want CAP_AUDIT_WRITE present", hc.CapAdd)
+	}
 	if hc.Privileged {
 		t.Error("Privileged container created")
 	}

@@ -44,14 +44,17 @@ func (d *DockerAdapter) Ping(ctx context.Context) error {
 // hardening returns the security options every Orbit unit gets.
 // Capabilities: ALL dropped, then the minimal set the bootstrap entrypoint
 // needs to administer the guest user's files (chown/write/setuid for `su`).
-// Everything else stays dropped; no-new-privileges + default seccomp remain.
+// AUDIT_WRITE is required by sshd's login-record path — without it PTY
+// (interactive shell) sessions abort after auth; KILL lets sshd clean up
+// its session children. Everything else stays dropped; no-new-privileges
+// + default seccomp remain.
 // shortcut: guest-side hardening relies on the drop + no-new-privileges; a
 // fully capless root bootstrap needs a redesign of the entrypoint (build-time
 // key injection), revisit in Phase 8 hardening backlog.
 func hardening() *container.HostConfig {
 	return &container.HostConfig{
 		CapDrop:       []string{"ALL"},
-		CapAdd:        []string{"CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID", "SYS_CHROOT"},
+		CapAdd:        []string{"CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID", "SYS_CHROOT", "AUDIT_WRITE", "KILL"},
 		SecurityOpt:   []string{"no-new-privileges"},
 		RestartPolicy: container.RestartPolicy{Name: "no"}, // Orbit's reconciler owns restarts
 		// seccomp: Docker's default profile applies unless overridden;
