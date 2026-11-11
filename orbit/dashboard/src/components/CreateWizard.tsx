@@ -69,7 +69,7 @@ export function CreateWizard({
             className={input + " mt-1 w-full"}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            pattern="[a-z][a-z0-9-]{2,30}"
+            pattern="[a-z][a-z0-9\-]{2,30}"
             placeholder="web-1"
             required
             data-testid="input-name"

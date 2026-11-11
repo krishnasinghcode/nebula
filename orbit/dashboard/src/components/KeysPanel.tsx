@@ -50,7 +50,7 @@ export function KeysPanel() {
         {(keys ?? []).length === 0 && <li className="text-zinc-500">No keys registered.</li>}
       </ul>
       <form onSubmit={create} className="space-y-2">
-        <input className={input + " w-40"} value={name} onChange={(e) => setName(e.target.value)} placeholder="name" pattern="[a-z][a-z0-9-]{2,30}" required data-testid="key-name" />
+        <input className={input + " w-40"} value={name} onChange={(e) => setName(e.target.value)} placeholder="name" pattern="[a-z][a-z0-9\-]{2,30}" required data-testid="key-name" />
         <textarea className={input + " w-full font-mono"} rows={2} value={pub} onChange={(e) => setPub(e.target.value)} placeholder="ssh-ed25519 AAAA…" required data-testid="key-pub" />
         {error && <p className="text-sm text-red-400">{error}</p>}
         <button className="rounded bg-blue-600 px-3 py-1.5 text-sm hover:bg-blue-500">Add key</button>
