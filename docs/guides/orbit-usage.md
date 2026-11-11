@@ -72,7 +72,7 @@ npm run dev
 
 Open **http://127.0.0.1:5173**, paste the token from step 2, click Connect. It's remembered in your browser.
 
-Everything below can be done from the dashboard UI or the CLI — both talk to the same API.
+Everything below can be done from the dashboard UI or the CLI — both talk to the same API. The dashboard has a light (green-accented, default) and dark theme — toggle in the top bar. The instance list has state filters (terminated instances are hidden by default), shows five rows per page, and surfaces API results as toast notifications; the ⓘ next to each section explains its fields (with "See more" for details).
 
 ## 4. Register an SSH key
 

@@ -1,1 +1,67 @@
 @import "tailwindcss";
+
+/* Theme tokens: default is light (soft green console); [data-theme=dark]
+   flips to the graphite palette. Components use the semantic colors only. */
+:root {
+  --c-bg: #f2f7f3;
+  --c-panel: #ffffff;
+  --c-hover: #eef5ef;
+  --c-line: #d9e4da;
+  --c-ink: #16211a;
+  --c-dim: #5b6b60;
+  --c-brand: #1a7f4b;
+  --c-brand-hover: #166c40;
+  --c-brand-ink: #ffffff;
+  --c-ok: #1a7f4b;
+  --c-warn: #a16207;
+  --c-bad: #b91c1c;
+}
+
+[data-theme="dark"] {
+  --c-bg: #09090b;
+  --c-panel: #111114;
+  --c-hover: #1a1a1e;
+  --c-line: #27272a;
+  --c-ink: #fafafa;
+  --c-dim: #a1a1aa;
+  --c-brand: #2563eb;
+  --c-brand-hover: #3b82f6;
+  --c-brand-ink: #ffffff;
+  --c-ok: #22c55e;
+  --c-warn: #eab308;
+  --c-bad: #ef4444;
+}
+
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-panel: var(--c-panel);
+  --color-hover: var(--c-hover);
+  --color-line: var(--c-line);
+  --color-ink: var(--c-ink);
+  --color-dim: var(--c-dim);
+  --color-brand: var(--c-brand);
+  --color-brand-hover: var(--c-brand-hover);
+  --color-brand-ink: var(--c-brand-ink);
+  --color-ok: var(--c-ok);
+  --color-warn: var(--c-warn);
+  --color-bad: var(--c-bad);
+}
+
+body {
+  background: var(--c-bg);
+  color: var(--c-ink);
+}
+
+/* Shared console styling */
+.console-input {
+  @apply rounded border border-line bg-panel px-2 py-1.5 text-sm text-ink outline-none transition-colors focus:border-brand;
+}
+.btn-primary {
+  @apply rounded bg-brand px-3 py-1.5 text-sm font-medium text-brand-ink transition-colors hover:bg-brand-hover disabled:opacity-50;
+}
+.btn-danger {
+  @apply rounded border border-bad px-3 py-1.5 text-sm font-medium text-bad transition-colors hover:bg-bad/10;
+}
+.th-label {
+  @apply p-2 text-[11px] font-semibold uppercase tracking-wider text-dim;
+}

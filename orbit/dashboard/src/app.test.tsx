@@ -89,4 +89,34 @@ describe("InstanceTable", () => {
     await userEvent.click(screen.getByTestId("row-web-1"));
     expect(onSelect).toHaveBeenCalledWith("orb-1");
   });
+
+  it("hides terminated by default and filters by state", async () => {
+    render(
+      <InstanceTable
+        instances={[...rows, { id: "orb-3", name: "dead-1", state: "terminated", image_id: "x", type_id: "y" }]}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId("row-dead-1")).toBeNull();
+    await userEvent.click(screen.getByTestId("filter-terminated"));
+    expect(screen.queryByTestId("row-web-1")).toBeNull();
+    expect(screen.getByTestId("row-dead-1")).toBeTruthy();
+  });
+
+  it("paginates five rows per page", async () => {
+    const many: Instance[] = Array.from({ length: 7 }, (_, i) => ({
+      id: `orb-${i}`,
+      name: `svc-${i}`,
+      state: "running",
+      image_id: "ubuntu-24.04",
+      type_id: "orbit.micro",
+    }));
+    render(<InstanceTable instances={many} onSelect={() => {}} />);
+    expect(screen.getByTestId("row-svc-0")).toBeTruthy();
+    expect(screen.queryByTestId("row-svc-5")).toBeNull();
+    expect(screen.getByTestId("page-indicator")).toHaveTextContent("1 / 2");
+    await userEvent.click(screen.getByTestId("page-next"));
+    expect(screen.getByTestId("row-svc-5")).toBeTruthy();
+    expect(screen.queryByTestId("row-svc-0")).toBeNull();
+  });
 });
