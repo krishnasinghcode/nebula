@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -48,6 +49,10 @@ func (s *Store) CreateInstance(in *Instance) error {
 		in.TransitionError, in.Owner, in.RootVolumeID,
 	)
 	if err != nil {
+		// SQLite constraint 2067 = UNIQUE violation (live-name partial index).
+		if strings.Contains(err.Error(), "constraint failed: UNIQUE") {
+			return &ConflictError{Message: fmt.Sprintf("instance name %q is already in use", in.Name)}
+		}
 		return fmt.Errorf("insert instance: %w", err)
 	}
 	return nil
