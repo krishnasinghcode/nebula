@@ -1,6 +1,6 @@
 # Orbit — Technical Design Package
 
-Design specification for Nebula Orbit produced before implementation. **All content is Proposed** pending the approvals listed in [§Final Recommendation](#final-recommendation).
+Design specification for Nebula Orbit. **Status: approved and implemented (MVP, v0.1.0).** Individual documents may retain pre-implementation status lines ("Proposed") in their headers; the authoritative record of what shipped, deviations, and open questions is [implementation-plan.md](implementation-plan.md).
 
 | Document | Contents |
 |---|---|
@@ -10,6 +10,7 @@ Design specification for Nebula Orbit produced before implementation. **All cont
 | [technical-design.md](technical-design.md) | Implementation approach per capability, technology choices, trade-offs |
 | [security.md](security.md) | Trust model, threat model, isolation, least privilege, security gates |
 | [data-and-api.md](data-and-api.md) | Data model, lifecycle state machine, API contracts |
+| [dashboard-design.md](dashboard-design.md) | Dashboard UI design system: themes, tokens, console patterns (keep new UI consistent) |
 | [testing-strategy.md](testing-strategy.md) | Test layers, scenario catalogue, measurable acceptance criteria |
 | [implementation-plan.md](implementation-plan.md) | **Execution plan for agents**: phase checklists, test gates, resume protocol, progress tracking |
 

@@ -1,8 +1,8 @@
 # Nebula — Architecture Overview
 
-This document describes the system-wide architecture of Nebula: its context, major components, boundaries, and interactions. It deliberately does **not** commit to a final architecture — most of what follows is *proposed* and subject to change. Service-internal design lives in the service architecture documents (currently [orbit.md](orbit.md)).
+This document describes the system-wide architecture of Nebula: its context, major components, boundaries, and interactions. Service-internal design lives in the service architecture documents (currently [orbit.md](orbit.md)).
 
-> **Status key:** items are marked **Proposed** (under consideration, not approved), **Accepted** (agreed direction), or **Implemented** (exists in code). Today, essentially everything is Proposed.
+> **Status key:** items are marked **Proposed** (under consideration, not approved), **Accepted** (agreed direction), or **Implemented** (exists in code). Orbit's MVP is **Implemented**; everything beyond it (monitoring, additional services) remains Proposed.
 
 ## System Context
 

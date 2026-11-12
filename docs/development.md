@@ -1,12 +1,13 @@
 # Nebula — Development Guide
 
-This document covers prerequisites, setup, build, and testing for working on Nebula. It is a template until the technology stack is selected; placeholders marked `<TBD>` must be filled in as decisions are made.
+This document covers prerequisites, setup, build, and testing for working on Nebula.
 
 ## Prerequisites
 
 - Git
-- `<TBD>` — runtime/toolchain requirements once the stack is selected
-- Docker — expected to be required for the initial Orbit implementation (not yet approved; treat as provisional)
+- Go 1.27 (backend and CLI)
+- Node.js 20+ (dashboard development only)
+- Docker — required: it is Orbit's compute runtime (ADR-0001)
 
 ## Technology Stack
 
@@ -20,8 +21,8 @@ Accepted — see [ADR-0001](decisions/0001-orbit-technology-stack.md) for ration
 | **SQLite (`modernc.org/sqlite`)** | Embedded state store; no database server install required. |
 | **Cobra** | CLI framework. |
 | **OpenAPI** | API contract; TypeScript client generated from the spec. |
-| **SSE** | Real-time instance status/lifecycle/monitoring updates. |
-| **React + TypeScript + Vite + Tailwind CSS + shadcn/ui** | Management dashboard (built after the MVP API is stable; CLI-first until then). |
+| **Polling (2s)** | Instance/key status updates in the dashboard. *(ADR-0001 listed SSE; implementation uses polling — logged deviation in the implementation plan.)* |
+| **React + TypeScript + Vite + Tailwind CSS (plain, no shadcn/ui)** | Management dashboard. *(shadcn/ui was listed in ADR-0001; plain Tailwind was chosen — logged deviation in the implementation plan.)* |
 
 Distributed infrastructure (Redis, Kafka, etc.) is intentionally excluded.
 

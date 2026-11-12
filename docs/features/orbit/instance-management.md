@@ -1,6 +1,6 @@
 # Feature Specification: Orbit Instance Management
 
-Service: **Orbit** · Status: **In development — MVP implemented behind the API/CLI; release pending security gates (Phase 8)**
+Service: **Orbit** · Status: **MVP implemented and released (v0.1.0) — API, CLI, dashboard, tests and CI complete; monitoring (logs/metrics) is partial**
 
 This document specifies the Orbit Instance Management feature. Placeholders marked `<TBD>` indicate requirements or decisions that have not been established; they must not be filled in with invented details.
 
